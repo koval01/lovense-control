@@ -1,0 +1,5 @@
+{
+  "name": "Lovense Controller",
+  "description": "A web application to control Lovense toys using the Lovense API.",
+  "requestFramePermissions": []
+}

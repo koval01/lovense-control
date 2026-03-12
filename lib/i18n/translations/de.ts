@@ -1,0 +1,77 @@
+import type { TranslationMap } from '@/lib/i18n/types';
+
+export const deTranslations: TranslationMap = {
+  appTitle: 'Lovense Steuerung',
+  language: 'Sprache',
+  theme: 'Thema',
+  themeAuto: 'Auto',
+  themeLight: 'Hell',
+  themeDark: 'Dunkel',
+  languageSelectionTitle: 'Sprache auswahlen',
+  languageSelectionSubtitle: 'Du kannst sie spater in der Kopfzeile der App andern.',
+  continue: 'Weiter',
+  loading: 'Wird geladen...',
+  myToys: 'Meine Toys',
+  stopAll: 'Alle stoppen',
+  connecting: 'Verbindung wird hergestellt',
+  establishingSecureConnection: 'Sichere Verbindung zu Lovense wird aufgebaut...',
+  connectionFailed: 'Verbindung fehlgeschlagen',
+  defaultConnectionError:
+    'Verbindung zu den Lovense-Servern nicht moglich. Bitte Netzwerk prufen und erneut versuchen.',
+  tryAgain: 'Erneut versuchen',
+  pairDevice: 'Gerat koppeln',
+  qrInstruction:
+    'Offne die Lovense Connect App auf deinem Handy und scanne diesen QR-Code, um deine Toys zu verbinden.',
+  lovenseQrCodeAlt: 'Lovense QR-Code',
+  waitingForAppConnection: 'Warte auf App-Verbindung...',
+  noToysFound: 'Keine Toys gefunden',
+  emptyStateHint:
+    'Bitte schalte dein Lovense Toy ein und verbinde es uber die Lovense Connect App auf deinem Handy.',
+  noToysSelected: 'Keine Toys ausgewahlt',
+  emptySelectionHint: 'Wahle oben mindestens ein Toy aus, um die Steuerung zu aktivieren.',
+  record: 'Aufnehmen',
+  stop: 'Stopp',
+  play: 'Abspielen',
+  pause: 'Pause',
+  resetGroups: 'Gruppen zurucksetzen',
+  maxLevel: 'Max. Level',
+  floatMode: 'Schweben',
+  toysConnected: '{count} Toys verbunden',
+  sliders: '{count} Regler',
+  maxLevelForFeature: 'Max. Level fur {feature}',
+  onboardingSkipToQr: 'Zum QR springen',
+  onboardingLanguageTitle: 'Sprache wahlen',
+  onboardingLanguageSubtitle:
+    'Wir versuchen zuerst, deine bevorzugte Sprache zu erkennen. Wenn sie falsch ist, wahle unten eine Sprache.',
+  onboardingUseSuggestedLanguage: 'Vorgeschlagen verwenden: {language}',
+  onboardingThemeTitle: 'Thema wahlen',
+  onboardingThemeSubtitle: 'Du kannst Automatisch lassen und fortfahren.',
+  onboardingThemeAutoDescription: 'An das helle/dunkle Systemdesign anpassen.',
+  onboardingThemeLightDescription: 'Immer das helle App-Design verwenden.',
+  onboardingThemeDarkDescription: 'Immer das dunkle App-Design verwenden.',
+  onboardingDemoTitle: 'Demo-Steuerung testen',
+  onboardingDemoSubtitle:
+    'Dies ist eine Live-Vorschau des echten Steuerpanels. Im Onboarding ist es gesperrt und lauft automatisch.',
+  onboardingDemoCommandsInfo:
+    'Ausgeloste Demo-Befehle: {count}. In einer echten Sitzung werden diese Befehle an verbundene Toys gesendet.',
+  onboardingContinueToQr: 'Weiter zur QR-Kopplung',
+  onboardingDemoVisualTitle: 'So sieht der Steuerbildschirm aus',
+  onboardingDemoVisualDescription:
+    'In diesem Schritt ist keine Interaktion moglich. Sieh dir die Auto-Demo an und gehe dann zur QR-Kopplung.',
+  onboardingDemoBubbleMode: 'Float-Modus (Bubbles nach oben ziehen fur mehr Intensitat)',
+  onboardingDemoLimitMode: 'Limit-Modus (maximales Level pro Funktion setzen)',
+  onboardingDemoHint1: 'Nach dem Koppeln wird dieses gleiche Panel interaktiv.',
+  onboardingDemoHint2: 'Die Demo wechselt Ansichten und Levels automatisch.',
+  onboardingDemoHint3: 'Sprache und Thema kannst du spater oben in der Kopfzeile andern.',
+  onboardingDemoStepGraph:
+    'Dieser Graph zeigt die Live-Reaktion: Die Kurve andert sich, wenn die Leistung geandert wird.',
+  onboardingDemoStepBubble:
+    'Im Float-Modus steuert die Bubble die Intensitat. Schau zu, wie sie sich bewegt und den Level andert.',
+  onboardingDemoStepLimits:
+    'Hier setzt du maximale Werte pro Funktion, damit die Steuerung angenehm bleibt.',
+  onboardingDemoStepSidebar:
+    'Das sind Schnellaktionen: Muster aufnehmen/abspielen und Gruppen zurucksetzen.',
+  onboardingDemoNextStep: 'Weiter',
+  onboardingDemoFinishTraining: 'Einfuhrung beenden',
+  onboardingDemoCompleted: 'Einfuhrung abgeschlossen. Du kannst zur QR-Kopplung weitergehen.',
+};

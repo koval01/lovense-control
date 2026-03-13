@@ -18,27 +18,9 @@
     }
   ],
   "durable_objects": {
-    "bindings": [
-      {
-        "name": "BRIDGE_ROOM",
-        "class_name": "BridgeRoomDurableObject"
-      },
-      {
-        "name": "BRIDGE_CODE",
-        "class_name": "BridgeCodeDurableObject"
-      }
-    ]
+    "bindings": []
   },
-  "migrations": [
-    {
-      "tag": "v1-bridge-room-do",
-      "new_sqlite_classes": ["BridgeRoomDurableObject"]
-    },
-    {
-      "tag": "v2-bridge-code-do",
-      "new_sqlite_classes": ["BridgeCodeDurableObject"]
-    }
-  ],
+  "migrations": [],
   "observability": {
     "enabled": true
   }

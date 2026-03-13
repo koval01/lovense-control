@@ -69,7 +69,26 @@ export type TranslationKey =
   | 'onboardingDemoStepSidebar'
   | 'onboardingDemoNextStep'
   | 'onboardingDemoFinishTraining'
-  | 'onboardingDemoCompleted';
+  | 'onboardingDemoCompleted'
+  | 'controlModeTitle'
+  | 'controlModeSubtitle'
+  | 'controlModeSelfTitle'
+  | 'controlModeSelfDescription'
+  | 'controlModePartnerTitle'
+  | 'controlModePartnerDescription'
+  | 'controlModePartnerUnavailableSuffix'
+  | 'partnerModeTitle'
+  | 'partnerModeDescription'
+  | 'partnerModeCreateCode'
+  | 'partnerModeBack'
+  | 'partnerModeJoinLabel'
+  | 'partnerModeJoinButton'
+  | 'partnerModeWaitingForRoom'
+  | 'partnerModeShareCode'
+  | 'partnerModeCopyCode'
+  | 'partnerModeStartLocalTestPeer'
+  | 'partnerModeStopLocalTestPeer'
+  | 'partnerModeExit';
 
 export type TranslationMap = Record<TranslationKey, string>;
 

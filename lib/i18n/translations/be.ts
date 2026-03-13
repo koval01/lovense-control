@@ -72,4 +72,27 @@ export const beTranslations: TranslationMap = {
   onboardingDemoNextStep: 'Далей',
   onboardingDemoFinishTraining: 'Завяршыць навучанне',
   onboardingDemoCompleted: 'Навучанне завершана. Можна перайсцi да QR-падключэння.',
+  controlModeTitle: 'Абярыце рэжым кiравання',
+  controlModeSubtitle:
+    'Спачатку выберыце, як вы хочаце гуляць. Падключэнне да цацак не ствараецца, пакуль вы не абярыце рэжым.',
+  controlModeSelfTitle: 'Кiраваць маiмi цацкамi',
+  controlModeSelfDescription: 'Выкарыстоўваць цяперашнi прамы паток з вашымi ўласнымi цацкамi.',
+  controlModePartnerTitle: 'Гуляць з партнёрам',
+  controlModePartnerDescription:
+    'Каманды праходзяць праз бяспечны мост з сервернай праверкай палiтык.',
+  controlModePartnerUnavailableSuffix: '(часова недаступна)',
+  partnerModeTitle: 'Рэжым моста з партнёрам',
+  partnerModeDescription:
+    'У гэтым рэжыме партнёр кiруе вашымi цацкамi праз тунэль, якi правяраецца серверам, а вы — яго.',
+  partnerModeCreateCode: 'Стварыць 6-значны код',
+  partnerModeBack: 'Назад',
+  partnerModeJoinLabel: 'Падключыцца па аднаразовым кодзе',
+  partnerModeJoinButton: 'Увайсцi ў пакой',
+  partnerModeWaitingForRoom: 'Чаканне сесіі пакоя для партнёра.',
+  partnerModeShareCode:
+    'Падзялiцеся гэтым 6-значным кодам з партнёрам. Яго можна выкарыстаць толькі аднойчы.',
+  partnerModeCopyCode: 'Скапіраваць код',
+  partnerModeStartLocalTestPeer: 'Запусцiць лакальнага тэст-партнёра',
+  partnerModeStopLocalTestPeer: 'Спынiць лакальнага тэст-партнёра',
+  partnerModeExit: 'Выйсцi з рэжыму партнёра',
 };

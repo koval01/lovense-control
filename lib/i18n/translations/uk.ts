@@ -71,4 +71,27 @@ export const ukTranslations: TranslationMap = {
   onboardingDemoNextStep: 'Далi',
   onboardingDemoFinishTraining: 'Завершити навчання',
   onboardingDemoCompleted: 'Навчання завершено. Можна переходити до QR-пiдключення.',
+  controlModeTitle: 'Оберiть режим керування',
+  controlModeSubtitle:
+    'Спочатку виберiть, як ви хочете грати. Пiдключення до iграшок не створюється, поки ви не виберете режим.',
+  controlModeSelfTitle: 'Керувати своїми iграшками',
+  controlModeSelfDescription: 'Використовувати поточний прямий потiк з вашими власними iграшками.',
+  controlModePartnerTitle: 'Грати з партнером',
+  controlModePartnerDescription:
+    'Команди проходять через захищений міст з серверною перевiркою полiтик.',
+  controlModePartnerUnavailableSuffix: '(зараз недоступно)',
+  partnerModeTitle: 'Режим моста з партнером',
+  partnerModeDescription:
+    'У цьому режимi партнер керує вашими iграшками через тунель, який перевiряється сервером, а ви — його.',
+  partnerModeCreateCode: 'Створити 6-значний код',
+  partnerModeBack: 'Назад',
+  partnerModeJoinLabel: 'Пiдключитися за одноразовим кодом',
+  partnerModeJoinButton: 'Увiйти до кiмнати',
+  partnerModeWaitingForRoom: 'Очiкування сесiї кiмнати для партнера.',
+  partnerModeShareCode:
+    'Подiлiться цим 6-значним кодом з партнером. Його можна використати лише один раз.',
+  partnerModeCopyCode: 'Скопiювати код',
+  partnerModeStartLocalTestPeer: 'Запустити локального тест-партнера',
+  partnerModeStopLocalTestPeer: 'Зупинити локального тест-партнера',
+  partnerModeExit: 'Вийти з режиму партнера',
 };

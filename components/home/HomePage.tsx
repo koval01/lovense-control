@@ -37,6 +37,7 @@ export function HomePage() {
     localToys: toys,
     onIncomingCommand: sendCommand,
   });
+  const isBridgeAvailable = bridge.isBridgeAvailable;
   const activeToyIds = useAppSelector((state) => state.selection.activeToyIds);
   const controllableToys = mode === 'partner' ? bridge.remoteToys : toys;
   useEffect(() => {
@@ -87,9 +88,11 @@ export function HomePage() {
     return (
       <div id="main-content" className="h-full min-h-screen bg-[var(--app-bg)] flex items-center justify-center p-5">
         <div className="w-full max-w-xl rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg-elevated)] p-5 md:p-6">
-          <h1 className="text-xl md:text-2xl font-semibold text-[var(--app-text)]">Choose control mode</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-[var(--app-text)]">
+            {t('controlModeTitle')}
+          </h1>
           <p className="mt-2 text-sm text-[var(--app-text-secondary)]">
-            Start by selecting how you want to play. No toy connection is created until you pick a mode.
+            {t('controlModeSubtitle')}
           </p>
           <div className="mt-4 grid gap-3">
             <button
@@ -97,19 +100,27 @@ export function HomePage() {
               onClick={() => dispatch(setMode('self'))}
               className="rounded-xl border border-[var(--app-border)] p-4 text-left hover:bg-[var(--app-bg)] transition-colors"
             >
-              <div className="font-medium text-[var(--app-text)]">Control my toys</div>
+              <div className="font-medium text-[var(--app-text)]">
+                {t('controlModeSelfTitle')}
+              </div>
               <div className="mt-1 text-sm text-[var(--app-text-secondary)]">
-                Use the current direct flow with your own toys.
+                {t('controlModeSelfDescription')}
               </div>
             </button>
             <button
               type="button"
-              onClick={() => dispatch(setMode('partner'))}
-              className="rounded-xl border border-[var(--app-border)] p-4 text-left hover:bg-[var(--app-bg)] transition-colors"
+              onClick={() => {
+                if (isBridgeAvailable) dispatch(setMode('partner'));
+              }}
+              disabled={!isBridgeAvailable}
+              className="rounded-xl border border-[var(--app-border)] p-4 text-left transition-colors disabled:opacity-50 hover:bg-[var(--app-bg)] disabled:hover:bg-[var(--app-bg-elevated)]"
             >
-              <div className="font-medium text-[var(--app-text)]">Play with a partner</div>
+              <div className="font-medium text-[var(--app-text)]">
+                {t('controlModePartnerTitle')}
+              </div>
               <div className="mt-1 text-sm text-[var(--app-text-secondary)]">
-                Commands go through a secure bridge with server-side policy checks.
+                {t('controlModePartnerDescription')}{' '}
+                {!isBridgeAvailable ? t('controlModePartnerUnavailableSuffix') : ''}
               </div>
             </button>
           </div>
@@ -122,9 +133,11 @@ export function HomePage() {
     return (
       <div id="main-content" className="h-full min-h-screen bg-[var(--app-bg)] flex items-center justify-center p-5">
         <div className="w-full max-w-xl rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg-elevated)] p-5 md:p-6">
-          <h1 className="text-xl md:text-2xl font-semibold text-[var(--app-text)]">Partner bridge mode</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-[var(--app-text)]">
+            {t('partnerModeTitle')}
+          </h1>
           <p className="mt-2 text-sm text-[var(--app-text-secondary)]">
-            In this mode, your partner controls your toys through a server-validated tunnel, and you control theirs.
+            {t('partnerModeDescription')}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-3">
@@ -135,19 +148,21 @@ export function HomePage() {
               }}
               className="rounded-xl bg-[var(--vkui--color_background_accent)] text-[var(--vkui--color_text_contrast)] px-4 py-2 text-sm font-medium"
             >
-              Create 6-digit code
+              {t('partnerModeCreateCode')}
             </button>
             <button
               type="button"
               onClick={() => dispatch(setMode('unselected'))}
               className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)]"
             >
-              Back
+              {t('partnerModeBack')}
             </button>
           </div>
 
           <div className="mt-4">
-            <label className="block text-sm text-[var(--app-text-secondary)] mb-1">Join with one-time code</label>
+            <label className="block text-sm text-[var(--app-text-secondary)] mb-1">
+              {t('partnerModeJoinLabel')}
+            </label>
             <input
               value={pairCodeInput}
               onChange={(event) => {
@@ -166,7 +181,7 @@ export function HomePage() {
               disabled={pairCodeInput.trim().length !== 6}
               className="mt-3 rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              Join room
+              {t('partnerModeJoinButton')}
             </button>
           </div>
 
@@ -189,8 +204,8 @@ export function HomePage() {
         <div className="px-4 pt-3 pb-2 bg-[var(--app-bg)] border-b border-[var(--app-border)] flex flex-wrap items-center gap-2">
           <span className="text-xs md:text-sm text-[var(--app-text-secondary)]">
             {bridge.pairCode
-              ? 'Share this 6-digit code with your partner. It can be used only once.'
-              : 'Waiting for partner room session.'}
+              ? t('partnerModeShareCode')
+              : t('partnerModeWaitingForRoom')}
           </span>
           {bridge.pairCode ? (
             <span className="rounded-lg border border-[var(--app-border)] px-3 py-1 text-xs font-semibold tracking-[0.2em]">
@@ -205,7 +220,7 @@ export function HomePage() {
               }}
               className="rounded-lg border border-[var(--app-border)] px-3 py-1 text-xs"
             >
-              Copy code
+              {t('partnerModeCopyCode')}
             </button>
           ) : null}
           {!bridge.isLocalTestPeerActive ? (
@@ -216,7 +231,7 @@ export function HomePage() {
               }}
               className="rounded-lg border border-[var(--app-border)] px-3 py-1 text-xs"
             >
-              Start local test peer
+              {t('partnerModeStartLocalTestPeer')}
             </button>
           ) : (
             <button
@@ -226,7 +241,7 @@ export function HomePage() {
               }}
               className="rounded-lg border border-[var(--app-border)] px-3 py-1 text-xs"
             >
-              Stop local test peer
+              {t('partnerModeStopLocalTestPeer')}
             </button>
           )}
           <button
@@ -237,7 +252,7 @@ export function HomePage() {
             }}
             className="rounded-lg border border-[var(--app-border)] px-3 py-1 text-xs"
           >
-            Exit partner mode
+            {t('partnerModeExit')}
           </button>
         </div>
         <HomeMainView

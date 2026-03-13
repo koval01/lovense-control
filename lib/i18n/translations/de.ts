@@ -74,4 +74,27 @@ export const deTranslations: TranslationMap = {
   onboardingDemoNextStep: 'Weiter',
   onboardingDemoFinishTraining: 'Einfuhrung beenden',
   onboardingDemoCompleted: 'Einfuhrung abgeschlossen. Du kannst zur QR-Kopplung weitergehen.',
+  controlModeTitle: 'Steuermodus auswahlen',
+  controlModeSubtitle:
+    'Wahle zuerst, wie du spielen mochtest. Es wird keine Verbindung zu Toys hergestellt, bis du einen Modus wahlst.',
+  controlModeSelfTitle: 'Meine Toys steuern',
+  controlModeSelfDescription: 'Den direkten Flow mit deinen eigenen Toys verwenden.',
+  controlModePartnerTitle: 'Mit einem Partner spielen',
+  controlModePartnerDescription:
+    'Befehle laufen uber eine sichere Bridge mit serverseitigen Richtlinienprufungen.',
+  controlModePartnerUnavailableSuffix: '(derzeit nicht verfugbar)',
+  partnerModeTitle: 'Partner-Bridge-Modus',
+  partnerModeDescription:
+    'In diesem Modus steuert dein Partner deine Toys uber einen servergepruften Tunnel, und du steuerst seine.',
+  partnerModeCreateCode: '6-stelligen Code erstellen',
+  partnerModeBack: 'Zuruck',
+  partnerModeJoinLabel: 'Mit Einmal-Code beitreten',
+  partnerModeJoinButton: 'Raum beitreten',
+  partnerModeWaitingForRoom: 'Warte auf Partner-Raumsitzung.',
+  partnerModeShareCode:
+    'Teile diesen 6-stelligen Code mit deinem Partner. Er kann nur einmal verwendet werden.',
+  partnerModeCopyCode: 'Code kopieren',
+  partnerModeStartLocalTestPeer: 'Lokalen Test-Partner starten',
+  partnerModeStopLocalTestPeer: 'Lokalen Test-Partner stoppen',
+  partnerModeExit: 'Partner-Modus verlassen',
 };

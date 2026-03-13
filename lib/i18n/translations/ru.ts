@@ -71,4 +71,27 @@ export const ruTranslations: TranslationMap = {
   onboardingDemoNextStep: 'Далее',
   onboardingDemoFinishTraining: 'Завершить обучение',
   onboardingDemoCompleted: 'Обучение завершено. Можно переходить к QR-подключению.',
+  controlModeTitle: 'Выберите режим управления',
+  controlModeSubtitle:
+    'Сначала выберите, как вы хотите играть. Подключение к игрушкам не создается, пока вы не выберете режим.',
+  controlModeSelfTitle: 'Управлять своими игрушками',
+  controlModeSelfDescription: 'Использовать текущий прямой поток с вашими собственными игрушками.',
+  controlModePartnerTitle: 'Играть с партнером',
+  controlModePartnerDescription:
+    'Команды проходят через защищенный мост с серверной проверкой политик.',
+  controlModePartnerUnavailableSuffix: '(сейчас недоступно)',
+  partnerModeTitle: 'Режим моста с партнером',
+  partnerModeDescription:
+    'В этом режиме партнер управляет вашими игрушками через проверенный сервером туннель, а вы — его.',
+  partnerModeCreateCode: 'Создать 6-значный код',
+  partnerModeBack: 'Назад',
+  partnerModeJoinLabel: 'Подключиться по одноразовому коду',
+  partnerModeJoinButton: 'Войти в комнату',
+  partnerModeWaitingForRoom: 'Ожидание сессии комнаты для партнера.',
+  partnerModeShareCode:
+    'Поделитесь этим 6-значным кодом с партнером. Его можно использовать только один раз.',
+  partnerModeCopyCode: 'Скопировать код',
+  partnerModeStartLocalTestPeer: 'Запустить локального тест-партнера',
+  partnerModeStopLocalTestPeer: 'Остановить локального тест-партнера',
+  partnerModeExit: 'Выйти из режима партнера',
 };

@@ -4,6 +4,7 @@ import type { Toy } from '@/lib/lovense-domain';
 import { extractRequestError, internalApiClient } from '@/lib/api/internal-client';
 
 export type LovenseStatus = 'idle' | 'initializing' | 'connecting' | 'qr_ready' | 'online' | 'error';
+export type ConnectionMode = 'unselected' | 'self' | 'partner';
 
 interface InitSessionResponse {
   authToken: string;
@@ -16,6 +17,7 @@ interface SocketUrlResponse {
 
 export interface ConnectionState {
   enabled: boolean;
+  mode: ConnectionMode;
   status: LovenseStatus;
   qrUrl: string | null;
   toys: Record<string, Toy>;
@@ -26,6 +28,7 @@ export interface ConnectionState {
 
 const initialState: ConnectionState = {
   enabled: true,
+  mode: 'unselected',
   status: 'initializing',
   qrUrl: null,
   toys: {},
@@ -73,6 +76,9 @@ const connectionSlice = createSlice({
   name: 'connection',
   initialState,
   reducers: {
+    setMode(state, action: PayloadAction<ConnectionMode>) {
+      state.mode = action.payload;
+    },
     setEnabled(state, action: PayloadAction<boolean>) {
       state.enabled = action.payload;
       if (!action.payload) {
@@ -131,6 +137,7 @@ const connectionSlice = createSlice({
 });
 
 export const {
+  setMode,
   setEnabled,
   setStatus,
   setQrUrl,

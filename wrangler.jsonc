@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
+  "main": "worker.ts",
   "name": "lovense-control",
   "compatibility_date": "2025-09-27",
   "compatibility_flags": [
@@ -15,6 +15,28 @@
     {
       "binding": "WORKER_SELF_REFERENCE",
       "service": "lovense-control"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "BRIDGE_ROOM",
+        "class_name": "BridgeRoomDurableObject"
+      },
+      {
+        "name": "BRIDGE_CODE",
+        "class_name": "BridgeCodeDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-bridge-room-do",
+      "new_sqlite_classes": ["BridgeRoomDurableObject"]
+    },
+    {
+      "tag": "v2-bridge-code-do",
+      "new_sqlite_classes": ["BridgeCodeDurableObject"]
     }
   ],
   "observability": {

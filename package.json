@@ -33,6 +33,7 @@
     "react-dom": "^19.2.1",
     "react-redux": "^9.2.0",
     "tailwind-merge": "^3.3.1",
+    "node-addon-api": "^7.1.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

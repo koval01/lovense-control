@@ -370,7 +370,7 @@ export function ToyControlContainer({
 
   return (
     <div
-      className={`overflow-hidden ${rootHeightClass} flex flex-col md:rounded-[var(--app-radius-card)] md:border md:border-[var(--vkui--color_separator_secondary)] md:shadow-[var(--app-shadow)] relative`}
+      className={`overflow-hidden ${rootHeightClass} flex flex-col md:rounded-[var(--app-radius-card)] md:border md:border-[var(--vkui--color_separator_secondary)] relative`}
       data-demo-target="control-root"
     >
       {!interactive && (

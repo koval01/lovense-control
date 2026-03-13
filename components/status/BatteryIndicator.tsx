@@ -17,7 +17,7 @@ export function BatteryIndicator({
   className = '',
 }: BatteryIndicatorProps) {
   const safeLevel = clampBattery(level);
-  const fillLevel = safeLevel === 0 ? 0 : Math.max(8, safeLevel);
+  const fillLevel = safeLevel === 0 ? 0 : Math.max(6, safeLevel);
   const isCritical = safeLevel < 10;
   const isLow = safeLevel < 30;
   const fillClass = isCritical
@@ -34,15 +34,18 @@ export function BatteryIndicator({
       title={`${safeLevel}%`}
     >
       <span className="inline-flex items-center">
-        <span className="relative w-4 h-2.5 rounded-[3px] border border-current/70">
-          <span
-            className={`absolute left-[1px] top-[1px] bottom-[1px] rounded-[2px] ${fillClass} ${
-              isCritical ? 'animate-pulse' : ''
-            }`}
-            style={{ width: `${fillLevel}%` }}
-          />
+        <span className="relative w-[22px] h-[12px]">
+          <span className="absolute inset-0 rounded-[4px] border border-current/60" />
+          <span className="absolute inset-y-[2px] left-[2px] right-[2px] overflow-hidden rounded-[3px]">
+            <span
+              className={`absolute inset-y-0 left-0 rounded-[3px] ${fillClass} ${
+                isCritical ? 'animate-pulse' : ''
+              } transition-[width] duration-200 ease-out`}
+              style={{ width: `${fillLevel}%` }}
+            />
+          </span>
         </span>
-        <span className="w-[2px] h-1.5 rounded-r-[2px] bg-current/70 ml-[1px]" />
+        <span className="ml-[1px] w-[2px] h-[6px] rounded-r-[2px] bg-current/60" />
       </span>
       {showPercent ? <span className="tabular-nums">{safeLevel}%</span> : null}
     </span>

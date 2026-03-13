@@ -4,6 +4,16 @@ import { NextResponse } from 'next/server';
 import { requestLovenseAuthToken } from '@/lib/server/lovense-api-client';
 
 const SESSION_COOKIE_NAME = 'lovense_session_token';
+const LOVENSE_IP_RESTRICTED_CODE = 'LOVENSE_IP_RESTRICTED';
+
+function isLovenseIpRestrictedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes('ip is restricted') || message.includes('frequent access');
+}
 
 function clearSessionCookie(response: NextResponse) {
   response.cookies.set(SESSION_COOKIE_NAME, '', { path: '/', maxAge: 0 });
@@ -52,6 +62,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ authToken, uid });
   } catch (error) {
     console.error('Lovense API Error:', error);
+    if (isLovenseIpRestrictedError(error)) {
+      return NextResponse.json(
+        {
+          error:
+            'Lovense temporarily blocked this server IP due to frequent requests. Please try again later.',
+          code: LOVENSE_IP_RESTRICTED_CODE,
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

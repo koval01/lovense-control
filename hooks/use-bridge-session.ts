@@ -64,7 +64,6 @@ export function useBridgeSession(options: {
   const { enabled, localToys, onIncomingCommand } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const testPeerWsRef = useRef<WebSocket | null>(null);
-  const testPeerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const localCapabilitiesRef = useRef<BridgeToyCapability[]>([]);
   const [status, setStatus] = useState<BridgeStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -83,10 +82,6 @@ export function useBridgeSession(options: {
   }, []);
 
   const clearTestPeer = useCallback(() => {
-    if (testPeerIntervalRef.current) {
-      clearInterval(testPeerIntervalRef.current);
-      testPeerIntervalRef.current = null;
-    }
     testPeerWsRef.current?.close();
     testPeerWsRef.current = null;
     setIsLocalTestPeerActive(false);
@@ -235,26 +230,10 @@ export function useBridgeSession(options: {
           } catch {
             return;
           }
-          if (message.type !== 'peer-capabilities') return;
 
-          const hostToy = (message.toys || [])[0];
-          if (!hostToy || testPeerIntervalRef.current) return;
-          const feature = hostToy.supportedFunctions?.[0] || 'Vibrate';
-          testPeerIntervalRef.current = setInterval(() => {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            const level = 1 + Math.floor(Math.random() * Math.min(hostToy.maxLevel || 10, 10));
-            const action = `${feature}:${level}`;
-            const payload: BridgeClientMessage = {
-              type: 'command',
-              payload: {
-                toyId: hostToy.id,
-                action,
-                timeSec: 1,
-                nonce: crypto.randomUUID(),
-              },
-            };
-            ws.send(JSON.stringify(payload));
-          }, 3500);
+          if (message.type === 'partner-command') {
+            onIncomingCommand(message.payload.toyId, message.payload.action, message.payload.timeSec ?? 0);
+          }
         };
       };
 

@@ -34,9 +34,23 @@ export default {
       }
 
       try {
+        // Create a WebSocketPair and hand the server side to the Durable Object.
+        const pair = new (globalThis as any).WebSocketPair();
+        const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
+
         const id = env.BRIDGE_ROOM.idFromName(roomId);
         const stub = env.BRIDGE_ROOM.get(id);
-        return await stub.fetch(request);
+
+        // Forward the server socket to the DO; DO will call acceptWebSocket().
+        await stub.fetch(request.url, {
+          method: 'POST',
+          webSocket: server,
+          headers: {
+            Upgrade: 'websocket',
+          },
+        } as any);
+
+        return new Response(null, { status: 101, webSocket: client });
       } catch (err) {
         console.error('[bridge] WebSocket upgrade failed:', err);
         const msg = err instanceof Error ? err.message : 'Bridge error';

@@ -143,8 +143,9 @@ export class BridgeRoomDurableObject extends DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
-      return new Response('Expected websocket upgrade', { status: 426 });
+    const webSocket = (request as any).webSocket as WebSocket | undefined;
+    if (!webSocket) {
+      return new Response('Expected websocket', { status: 400 });
     }
 
     const ticketParam = new URL(request.url).searchParams.get('ticket');
@@ -174,8 +175,7 @@ export class BridgeRoomDurableObject extends DurableObject {
       return new Response('Room is full', { status: 403 });
     }
 
-    const [client, server] = Object.values(new (globalThis as any).WebSocketPair()) as [WebSocket, WebSocket];
-    this.runtimeState.acceptWebSocket(server);
+    this.runtimeState.acceptWebSocket(webSocket);
 
     const now = Date.now();
     const session: SessionMeta = {
@@ -187,23 +187,27 @@ export class BridgeRoomDurableObject extends DurableObject {
       rateCount: 0,
       nonceExpiryMsByValue: new Map(),
     };
-    this.sessions.set(server, session);
+    this.sessions.set(webSocket, session);
 
-    (server as any).serializeAttachment({
+    (webSocket as any).serializeAttachment({
       ...session,
       nonceExpiryMsByValue: undefined,
     });
 
-    this.send(server, {
+    this.send(webSocket, {
       type: 'hello-ack',
       userId: session.userId,
       roomId: session.roomId,
     });
     this.broadcastPeerState();
     this.broadcastCapabilities();
-    console.info('[bridge] connected', { roomId: session.roomId, userId: session.userId, role: session.role });
+    console.info('[bridge] connected', {
+      roomId: session.roomId,
+      userId: session.userId,
+      role: session.role,
+    });
 
-    return new Response(null, { status: 101, webSocket: client } as ResponseInit);
+    return new Response(null, { status: 101 });
   }
 
   webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {

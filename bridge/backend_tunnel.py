@@ -7,7 +7,7 @@ to the opposite frontend.
 """
 
 import asyncio
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 import websockets
 
@@ -99,7 +99,7 @@ class BackendTunnel:
         if room:
             room.clear_backend(self._role)
 
-    async def _ping_loop(self, ws: websockets.WebSocket) -> None:
+    async def _ping_loop(self, ws: Any) -> None:
         while True:
             await asyncio.sleep(PING_INTERVAL_SEC)
             try:
@@ -107,7 +107,7 @@ class BackendTunnel:
             except (websockets.ConnectionClosed, OSError, ConnectionError):
                 break
 
-    async def _read_ws(self, ws: websockets.WebSocket) -> None:
+    async def _read_ws(self, ws: Any) -> None:
         try:
             async for msg in ws:
                 data = msg.encode("utf-8") if isinstance(msg, str) else msg
@@ -121,7 +121,7 @@ class BackendTunnel:
                 self._room_id, self._role, e.code, e.reason,
             )
 
-    async def _write_ws(self, ws: websockets.WebSocket, queue: asyncio.Queue) -> None:
+    async def _write_ws(self, ws: Any, queue: asyncio.Queue) -> None:
         try:
             while True:
                 msg = await queue.get()

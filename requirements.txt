@@ -1,6 +1,7 @@
 # Bridge server (bridge/ package; run: python3 -m bridge or python3 bridge_server.py)
 fastapi>=0.100.0
 uvicorn>=0.22.0
+uvloop>=0.19.0
 httpx>=0.24.0
 PyJWT>=2.0.0
 websockets>=11.0

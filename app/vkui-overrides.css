@@ -1,0 +1,68 @@
+/* Loaded after vkui.css — override VK tokens and header icons to use app accent (pink) */
+
+/* 1) Розовый акцент и иконки в шапке только для светлой темы (и auto при светлой системе). */
+:root[data-theme='light'] {
+  --vkui--color_icon_accent: var(--app-accent);
+  --vkui--color_icon_accent--hover: var(--app-accent-strong);
+  --vkui--color_icon_accent--active: var(--app-accent-strong);
+  --vkui--color_icon_accent_themed: var(--app-accent);
+  --vkui--color_icon_accent_themed--hover: var(--app-accent-strong);
+  --vkui--color_icon_accent_themed--active: var(--app-accent-strong);
+  --vkui--color_stroke_accent: var(--app-accent-strong);
+  --vkui--color_stroke_accent--hover: var(--app-accent-strong);
+  --vkui--color_stroke_accent--active: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed--hover: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed--active: var(--app-accent-strong);
+  --vkui--color_background_accent: var(--app-accent);
+  --vkui--color_panel_header_icon: var(--app-accent);
+  --vkui--color_panel_header_icon--hover: var(--app-accent-strong);
+  --vkui--color_panel_header_icon--active: var(--app-accent-strong);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme='auto'] {
+    --vkui--color_icon_accent: var(--app-accent);
+    --vkui--color_icon_accent--hover: var(--app-accent-strong);
+    --vkui--color_icon_accent--active: var(--app-accent-strong);
+    --vkui--color_icon_accent_themed: var(--app-accent);
+    --vkui--color_icon_accent_themed--hover: var(--app-accent-strong);
+    --vkui--color_icon_accent_themed--active: var(--app-accent-strong);
+    --vkui--color_stroke_accent: var(--app-accent-strong);
+    --vkui--color_stroke_accent--hover: var(--app-accent-strong);
+    --vkui--color_stroke_accent--active: var(--app-accent-strong);
+    --vkui--color_stroke_accent_themed: var(--app-accent-strong);
+    --vkui--color_stroke_accent_themed--hover: var(--app-accent-strong);
+    --vkui--color_stroke_accent_themed--active: var(--app-accent-strong);
+    --vkui--color_background_accent: var(--app-accent);
+    --vkui--color_panel_header_icon: var(--app-accent);
+    --vkui--color_panel_header_icon--hover: var(--app-accent-strong);
+    --vkui--color_panel_header_icon--active: var(--app-accent-strong);
+  }
+}
+
+/* Тёмная тема и auto при тёмной системе: переопределения не задаём — иконки в шапке белые (по умолчанию VK UI). */
+
+/* 2) Только светлые темы VK UI — розовый акцент и иконки в шапке. Тёмные (.vkBase--dark и т.д.) не трогаем. */
+.vkui--vkBase--light,
+.vkui--vkIOS--light,
+.vkui--vkCom--light {
+  --vkui--color_icon_accent: var(--app-accent);
+  --vkui--color_icon_accent--hover: var(--app-accent-strong);
+  --vkui--color_icon_accent--active: var(--app-accent-strong);
+  --vkui--color_icon_accent_themed: var(--app-accent);
+  --vkui--color_icon_accent_themed--hover: var(--app-accent-strong);
+  --vkui--color_icon_accent_themed--active: var(--app-accent-strong);
+  --vkui--color_stroke_accent: var(--app-accent-strong);
+  --vkui--color_stroke_accent--hover: var(--app-accent-strong);
+  --vkui--color_stroke_accent--active: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed--hover: var(--app-accent-strong);
+  --vkui--color_stroke_accent_themed--active: var(--app-accent-strong);
+  --vkui--color_background_accent: var(--app-accent);
+  --vkui--color_panel_header_icon: var(--app-accent);
+  --vkui--color_panel_header_icon--hover: var(--app-accent-strong);
+  --vkui--color_panel_header_icon--active: var(--app-accent-strong);
+}
+
+/* 3) Не переопределять fill/stroke у path — иначе контурные иконки (глобус и т.д.) превращаются в сплошной квадрат. Цвет задаётся только токенами выше (color_panel_header_icon). */

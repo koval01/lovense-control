@@ -1,0 +1,10 @@
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+*.pyc
+.env*
+!.env.example
+.open-next/
+.wrangler/

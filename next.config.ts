@@ -1,7 +1,11 @@
 import type {NextConfig} from 'next';
+import {BRIDGE_SERVER_URL} from './lib/bridge-config';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_BRIDGE_SERVER_URL: BRIDGE_SERVER_URL,
+  },
   ...(process.env.NODE_ENV === 'production'
     ? {
         experimental: {

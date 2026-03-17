@@ -43,11 +43,6 @@ const PONG = '3';
 const WS_MESSAGE_MAX_BYTES = 256 * 1024;
 const FORWARD_ONLY_EVENTS = new Set([BRIDGE_PING, BRIDGE_PONG, BRIDGE_CHAT_TYPING]);
 const PING_INTERVAL_MS = 20_000;
-const LOVENSE_WS_HEADERS: Record<string, string> = {
-  Origin: 'http://localhost:3000',
-  'User-Agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-};
 
 export interface Env {
   JWT_SECRET: string;
@@ -234,46 +229,53 @@ export class BridgeRoom extends DurableObject<Env> {
   }
 
   private spawnBackendTunnel(wsUrl: string, role: 'host' | 'guest'): void {
-    const headers: Record<string, string> = { Upgrade: 'websocket', ...LOVENSE_WS_HEADERS };
-    fetch(wsUrl, { headers })
-      .then((res) => {
-        const ws = res.webSocket;
-        if (!ws) throw new Error('No WebSocket in response');
-        ws.accept();
+    // Use WebSocket constructor instead of fetch() — Cloudflare's fetch can reject wss:// URLs
+    // with "Fetch API cannot load" in some contexts (e.g. Durable Objects).
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error(`[BridgeRoom] Lovense backend connect failed: room=${this.roomId} role=${role}`, err);
+      if (role === 'host') this.hostBackend = null;
+      else this.guestBackend = null;
+      return;
+    }
 
-        if (role === 'host') {
-          this.hostBackend = ws;
-        } else {
-          this.guestBackend = ws;
-          if (this.guestUsesHostBackend && this.hostBackend) {
-            (this as { guestBackend: WebSocket | null }).guestBackend = this.hostBackend;
-          }
+    ws.addEventListener('open', () => {
+      if (role === 'host') {
+        this.hostBackend = ws;
+      } else {
+        this.guestBackend = ws;
+        if (this.guestUsesHostBackend && this.hostBackend) {
+          (this as { guestBackend: WebSocket | null }).guestBackend = this.hostBackend;
         }
-        console.log(`[BridgeRoom] Lovense backend connected: room=${this.roomId} role=${role}`);
+      }
+      console.log(`[BridgeRoom] Lovense backend connected: room=${this.roomId} role=${role}`);
 
-        ws.addEventListener('message', (ev) => {
-          const data = typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data);
-          if (data.startsWith('0{')) {
-            ws.send('40');
-          } else if (data.startsWith('42')) {
-            this.routeBackendToFrontends(data, role);
-          }
-        });
-
-        const { pingId, writeId } = this.runBackendLoops(ws, role);
-        ws.addEventListener('close', () => {
-          clearInterval(pingId);
-          clearInterval(writeId);
-          if (role === 'host') this.hostBackend = null;
-          else if (!this.guestUsesHostBackend) this.guestBackend = null;
-          console.log(`[BridgeRoom] Lovense backend closed: room=${this.roomId} role=${role}`);
-        });
-      })
-      .catch((err) => {
-        console.error(`[BridgeRoom] Lovense backend connect failed: room=${this.roomId} role=${role}`, err);
-        if (role === 'host') this.hostBackend = null;
-        else this.guestBackend = null;
+      ws.addEventListener('message', (ev) => {
+        const data = typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data);
+        if (data.startsWith('0{')) {
+          ws.send('40');
+        } else if (data.startsWith('42')) {
+          this.routeBackendToFrontends(data, role);
+        }
       });
+
+      const { pingId, writeId } = this.runBackendLoops(ws, role);
+      ws.addEventListener('close', () => {
+        clearInterval(pingId);
+        clearInterval(writeId);
+        if (role === 'host') this.hostBackend = null;
+        else if (!this.guestUsesHostBackend) this.guestBackend = null;
+        console.log(`[BridgeRoom] Lovense backend closed: room=${this.roomId} role=${role}`);
+      });
+    });
+
+    ws.addEventListener('error', (err) => {
+      console.error(`[BridgeRoom] Lovense backend connect failed: room=${this.roomId} role=${role}`, err);
+      if (role === 'host') this.hostBackend = null;
+      else this.guestBackend = null;
+    });
   }
 
   private runBackendLoops(ws: WebSocket, role: 'host' | 'guest'): { pingId: ReturnType<typeof setInterval>; writeId: ReturnType<typeof setInterval> } {

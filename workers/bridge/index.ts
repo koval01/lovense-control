@@ -126,12 +126,15 @@ export default {
       );
     }
 
-    const addCors = (res: Response) => {
+    const addCors = (res: Response, preserveWebSocket = false) => {
       const headers = new Headers(res.headers);
       for (const [k, v] of Object.entries(corsHeaders(origin, env))) {
         if (v) headers.set(k, v);
       }
-      return new Response(res.body, { status: res.status, headers });
+      const init: ResponseInit & { webSocket?: WebSocket } = { status: res.status, headers };
+      const ws = (res as Response & { webSocket?: WebSocket }).webSocket;
+      if (preserveWebSocket && ws) init.webSocket = ws;
+      return new Response(res.body, init);
     };
 
     if (request.method === 'POST' && path === '/rooms') {
@@ -224,7 +227,7 @@ export default {
       const id = env.BRIDGE_ROOM.idFromName(roomId);
       const stub = env.BRIDGE_ROOM.get(id);
       const res = await stub.fetch(request);
-      return addCors(new Response(res.body, { status: res.status, headers: res.headers }));
+      return addCors(res, true);
     }
 
     return addCors(new Response('Not Found', { status: 404 }));

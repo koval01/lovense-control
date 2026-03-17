@@ -19,7 +19,6 @@ import { HomeActionSheet } from '@/components/home/HomeActionSheet';
 import { PartnerChatFloating } from '@/components/partner/PartnerChatFloating';
 import { PartnerChatModal } from '@/components/partner/PartnerChatModal';
 import { StatusQrView } from '@/components/status/StatusQrView';
-import { hasLovenseEverConnected } from '@/lib/connection-persistence';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setMode, type ConnectionMode } from '@/store/slices/connectionSlice';
 import { syncActiveToyIds, toggleToy } from '@/store/slices/selectionSlice';
@@ -51,10 +50,10 @@ export function HomePage() {
     setThemeMode,
   });
   const mode = useAppSelector((state) => state.connection.mode);
+  const sessionStarted = useAppSelector((state) => state.connection.sessionStarted);
   const isAppReady = isReady && onboarding.isOnboardingReady && onboarding.isOnboardingComplete;
-  const lovenseEverConnected = hasLovenseEverConnected();
   const { status, qrUrl, qrCode, toys, error, sendCommand } = useLovense({
-    enabled: isAppReady && (mode === 'self' || (mode === 'partner' && !lovenseEverConnected)),
+    enabled: isAppReady && (mode === 'self' || mode === 'partner'),
   });
   const [pairCodeInput, setPairCodeInput] = useState('');
   const isMobile = useIsMobile();
@@ -225,7 +224,7 @@ export function HomePage() {
               className="w-full h-11 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-base tracking-[0.2em] text-[var(--app-text)] font-mono"
               placeholder={t('partnerModeJoinPlaceholder')}
             />
-            {!lovenseEverConnected && (
+            {!sessionStarted && (
               <p className="mt-2 text-xs text-[var(--app-text-secondary)]">
                 {t('partnerModeJoinRequireConnection')}
               </p>
@@ -233,9 +232,9 @@ export function HomePage() {
             <button
               type="button"
               onClick={() => {
-                if (lovenseEverConnected) void bridge.joinRoom(pairCodeInput.trim());
+                if (sessionStarted) void bridge.joinRoom(pairCodeInput.trim());
               }}
-              disabled={pairCodeInput.trim().length !== PAIR_CODE_LENGTH || !lovenseEverConnected}
+              disabled={pairCodeInput.trim().length !== PAIR_CODE_LENGTH || !sessionStarted}
               className="mt-3 w-full rounded-xl bg-[var(--app-accent)] text-white px-4 py-2.5 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-[var(--app-surface-soft)] disabled:text-[var(--app-text-secondary)] disabled:border disabled:border-[var(--app-border)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
             >
               {t('partnerModeJoinButton')}
@@ -246,7 +245,7 @@ export function HomePage() {
             <p className="text-xs text-[var(--app-text-secondary)] mb-3">
               {t('partnerModeCreateCodeHint')}
             </p>
-            {!lovenseEverConnected ? (
+            {!sessionStarted ? (
               <>
                 <p className="text-sm text-[var(--app-text-secondary)] mb-3">
                   {t('partnerModeScanHereOrSelf')}

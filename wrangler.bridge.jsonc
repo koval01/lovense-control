@@ -4,6 +4,10 @@
   "main": "workers/bridge/index.ts",
   "compatibility_date": "2025-09-27",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "BRIDGE_ENV": "production",
+    "CORS_ORIGINS": "https://lovense.koval-dev.org"
+  },
   "routes": [
     {
       "pattern": "lovense.koval-dev.org/bridge/*",

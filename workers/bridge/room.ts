@@ -113,9 +113,17 @@ export class BridgeRoom extends DurableObject<Env> {
     this.ctx.storage.setAlarm(Date.now() + this.ROOM_IDLE_TIMEOUT_MS);
   }
 
+  private static normalizePath(path: string): string {
+    if (path.startsWith('/bridge')) {
+      const rest = path.slice(7) || '/';
+      return rest.startsWith('/') ? rest : `/${rest}`;
+    }
+    return path;
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const path = url.pathname;
+    const path = BridgeRoom.normalizePath(url.pathname);
 
     if (request.method === 'POST' && (path === '/internal/register' || path === '/getSocketUrl')) {
       return this.handleRegister(request);

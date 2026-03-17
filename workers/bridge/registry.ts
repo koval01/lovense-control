@@ -1,5 +1,6 @@
 /**
  * BridgeRegistry Durable Object: create room, join room, pair_code lookup.
+ * Uses SQLite-backed storage so rooms survive DO eviction.
  */
 
 import { DurableObject } from 'cloudflare:workers';
@@ -7,6 +8,8 @@ import { createTicket } from './auth';
 
 const PAIR_CODE_LENGTH = 8;
 const PAIR_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const KV_PREFIX_PAIR = 'pc:';
+const KV_PREFIX_ROOM = 'room:';
 
 function generatePairCode(): string {
   let result = '';
@@ -24,11 +27,15 @@ export interface Env {
 }
 
 export class BridgeRegistry extends DurableObject<Env> {
-  private pairCodes: Map<string, string> = new Map(); // pairCode -> roomId
-  private roomToPairCode: Map<string, string> = new Map(); // roomId -> pairCode
+  private ctx: DurableObjectState;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.ctx = ctx;
+  }
+
+  private kv() {
+    return this.ctx.storage.kv;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -55,13 +62,15 @@ export class BridgeRegistry extends DurableObject<Env> {
     }
 
     const roomId = crypto.randomUUID();
+    const kv = this.kv();
     let pairCode = generatePairCode();
-    while (this.pairCodes.has(pairCode)) {
+    for (let i = 0; i < 100; i++) {
+      if (!kv.get(KV_PREFIX_PAIR + pairCode)) break;
       pairCode = generatePairCode();
     }
 
-    this.pairCodes.set(pairCode, roomId);
-    this.roomToPairCode.set(roomId, pairCode);
+    kv.put(KV_PREFIX_PAIR + pairCode, roomId);
+    kv.put(KV_PREFIX_ROOM + roomId, pairCode);
     const hostTicket = await createTicket(roomId, 'host', secret);
     console.log(`[BridgeRegistry] Room created: roomId=${roomId} pairCode=${pairCode}`);
 
@@ -78,10 +87,11 @@ export class BridgeRegistry extends DurableObject<Env> {
     if (!roomId) {
       return new Response('roomId required', { status: 400 });
     }
-    const pairCode = this.roomToPairCode.get(roomId);
+    const kv = this.kv();
+    const pairCode = kv.get(KV_PREFIX_ROOM + roomId) as string | undefined;
     if (pairCode) {
-      this.pairCodes.delete(pairCode);
-      this.roomToPairCode.delete(roomId);
+      kv.delete(KV_PREFIX_PAIR + pairCode);
+      kv.delete(KV_PREFIX_ROOM + roomId);
     }
     return new Response(null, { status: 204 });
   }
@@ -93,7 +103,7 @@ export class BridgeRegistry extends DurableObject<Env> {
       return Response.json({ error: 'pairCode required' }, { status: 400 });
     }
 
-    const roomId = this.pairCodes.get(pairCode);
+    const roomId = this.kv().get(KV_PREFIX_PAIR + pairCode) as string | undefined;
     if (!roomId) {
       return Response.json({ detail: 'Room not found' }, { status: 404 });
     }

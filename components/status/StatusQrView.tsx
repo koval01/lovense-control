@@ -145,13 +145,7 @@ export function StatusQrView({ qrUrl, qrCode, compact = false }: StatusQrViewPro
           />
         ) : null}
       </div>
-      <div
-        className={
-          compact
-            ? 'flex items-center gap-2 text-sm text-[var(--app-text-secondary)]'
-            : 'flex items-center gap-3 text-sm font-medium text-[var(--app-text-secondary)] bg-[var(--app-bg-elevated)] border border-[var(--app-border)] px-6 py-3 rounded-full whitespace-nowrap shadow-[var(--app-shadow)]'
-        }
-      >
+      <div className="flex items-center gap-3 text-sm font-medium text-[var(--app-text-secondary)] bg-[var(--app-bg-elevated)] border border-[var(--app-border)] px-6 py-3 rounded-full whitespace-nowrap shadow-[var(--app-shadow)]">
         <Spinner size="m" /> <span>{t('waitingForAppConnection')}</span>
       </div>
     </motion.div>

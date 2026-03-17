@@ -102,16 +102,17 @@ function buildHttpAndWsUrls(raw: string | undefined | null) {
   if (!raw) return { httpBase: '', wsBase: '' };
   try {
     const url = new URL(raw);
+    const path = (url.pathname || '/').replace(/\/+$/, '') || '';
     if (url.protocol.startsWith('http')) {
       const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsBase = `${wsProtocol}//${url.host}`;
-      const httpBase = `${url.protocol}//${url.host}`;
+      const wsBase = `${wsProtocol}//${url.host}${path}`;
+      const httpBase = `${url.protocol}//${url.host}${path}`;
       return { httpBase, wsBase };
     }
     if (url.protocol.startsWith('ws')) {
       const httpProtocol = url.protocol === 'wss:' ? 'https:' : 'http:';
-      const httpBase = `${httpProtocol}//${url.host}`;
-      const wsBase = `${url.protocol}//${url.host}`;
+      const httpBase = `${httpProtocol}//${url.host}${path}`;
+      const wsBase = `${url.protocol}//${url.host}${path}`;
       return { httpBase, wsBase };
     }
   } catch {

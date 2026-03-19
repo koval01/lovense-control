@@ -120,6 +120,7 @@ export const ukTranslations: TranslationMap = {
   partnerTheirToysTitle: 'Іграшки партнера',
   partnerToyReadOnly: 'Лише перегляд у режимі партнера',
   partnerModeToyDisabledByOwner: 'Вимкнено партнером',
+  partnerToyPolicyCooldownHint: 'Оновлення… зачекайте секунду перед наступним перемиканням.',
   partnerLimitLabel: 'Ліміт партнера',
   partnerChatPlaceholder: 'Повідомлення...',
   partnerChatSend: 'Надіслати',

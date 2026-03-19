@@ -46,6 +46,7 @@ interface HomeMainViewProps {
   onOpenLanguage: () => void;
   onToggleToy: (toyId: string) => void;
   onToggleLocalToy?: (toyId: string) => void;
+  isLocalToyPolicyToggleFrozen?: (toyId: string) => boolean;
   /** When status is error, optional secondary button (e.g. Exit partner mode). */
   errorSecondaryAction?: { label: string; onClick: () => void };
   /** Partner / reconnect: block sliders and commands (visual freeze). */
@@ -78,6 +79,7 @@ export function HomeMainView({
   onOpenLanguage,
   onToggleToy,
   onToggleLocalToy,
+  isLocalToyPolicyToggleFrozen,
   errorSecondaryAction,
   controlsFrozen = false,
   headerLeftAction,
@@ -128,6 +130,7 @@ export function HomeMainView({
                   localToys={isPartnerMode ? localToys : undefined}
                   localEnabledToyIds={isPartnerMode ? localEnabledToyIds : undefined}
                   onToggleLocalToy={isPartnerMode ? onToggleLocalToy : undefined}
+                  isLocalToyPolicyToggleFrozen={isPartnerMode ? isLocalToyPolicyToggleFrozen : undefined}
                   partnerEnabledToyIds={isPartnerMode ? partnerEnabledToyIds : undefined}
                   emptyStateTitleKey={emptyStateTitleKey}
                   emptyStateHintKey={emptyStateHintKey}

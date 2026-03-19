@@ -119,6 +119,7 @@ export const ruTranslations: TranslationMap = {
   partnerTheirToysTitle: 'Игрушки партнёра',
   partnerToyReadOnly: 'Только просмотр в режиме партнёра',
   partnerModeToyDisabledByOwner: 'Отключено партнёром',
+  partnerToyPolicyCooldownHint: 'Обновление… подождите секунду перед следующим переключением.',
   partnerLimitLabel: 'Лимит партнёра',
   partnerChatPlaceholder: 'Сообщение...',
   partnerChatSend: 'Отправить',

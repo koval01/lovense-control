@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Toy } from '@/lib/lovense-domain';
 import type { BridgeToyCapability } from '@/lib/bridge/protocol';
-import { LovenseWsClient } from '@/lib/lovense/ws-client';
+import { closeBridgeWebSocketInTab, LovenseWsClient } from '@/lib/lovense/ws-client';
 import { internalApiClient } from '@/lib/api/internal-client';
 import { FEATURE_MAX_LEVELS } from '@/lib/lovense/constants';
 import { buildToyFeatures } from '@/lib/lovense-domain';
@@ -163,6 +163,9 @@ const RAW_BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_SERVER_URL ?? '';
 const { httpBase: BRIDGE_HTTP_BASE, wsBase: BRIDGE_WS_BASE } = buildHttpAndWsUrls(RAW_BRIDGE_URL);
 const BRIDGE_AVAILABLE = Boolean(BRIDGE_HTTP_BASE && BRIDGE_WS_BASE);
 
+/** Partner: min gap between local enable/disable taps per toy (UI; server uses 900 ms). */
+const LOCAL_TOY_POLICY_UI_COOLDOWN_MS = 1000;
+
 /** Register path on the bridge: worker binds ticket to a Lovense backend tunnel. */
 const BRIDGE_REGISTER_SESSION_PATH = '/register-session';
 
@@ -256,9 +259,15 @@ export function useBridgeSession(options: {
   const preflightHostTicketRef = useRef<string | null>(null);
   /** Aborts in-flight POST /rooms for preflight when leaving partner mode or starting a new preflight. */
   const preflightAbortRef = useRef<AbortController | null>(null);
+  /** Bumped on cleanup / reset so late preflight async work cannot call setupWebSocket after exit. */
+  const preflightAbortGenerationRef = useRef(0);
+  /** Single in-flight partner preflight (effect + Strict Mode + createRoom cannot run two POST /rooms in parallel). */
+  const preflightSessionPromiseRef = useRef<Promise<void> | null>(null);
   /** Monotonic id per bridge WS instance; closeSocket sets active to -1 so stale onClose cannot fire reconnect. */
   const bridgeClientSeqRef = useRef(0);
   const activeBridgeClientSerialRef = useRef(0);
+  /** Ticket used for the current in-flight or open bridge WebSocket (avoids duplicate sockets on repeated setupWebSocket). */
+  const bridgeWsBoundTicketRef = useRef<string | null>(null);
   /** Synchronous guard so a late QR payload cannot flash after session becomes ready. */
   const selfSessionReadyRef = useRef(false);
   const roomIdRef = useRef<string | null>(null);
@@ -281,6 +290,8 @@ export function useBridgeSession(options: {
   const [partnerAuthLatch, setPartnerAuthLatch] = useState(false);
 
   const lovenseClientRef = useRef<LovenseWsClient | null>(null);
+  const localToyPolicyCooldownUntilRef = useRef<Record<string, number>>({});
+  const [localToyPolicyCooldownEpoch, setLocalToyPolicyCooldownEpoch] = useState(0);
 
   const remoteToys = useMemo(() => mapRemoteCapabilitiesToToyMap(remoteCapabilities), [remoteCapabilities]);
   const localToysFromBridge = useMemo(() => mapRemoteCapabilitiesToToyMap(localCapabilities), [localCapabilities]);
@@ -299,8 +310,10 @@ export function useBridgeSession(options: {
   }, [roomId, error, preparingSession, socketIoConnected, selfSessionReady, partnerAuthLatch]);
 
   const resetState = useCallback(() => {
+    preflightAbortGenerationRef.current += 1;
     preflightAbortRef.current?.abort();
     preflightAbortRef.current = null;
+    preflightSessionPromiseRef.current = null;
     setStatus('idle');
     setError(null);
     setPairCode(null);
@@ -342,14 +355,20 @@ export function useBridgeSession(options: {
     preflightRoomIdRef.current = null;
     preflightPairCodeRef.current = null;
     preflightHostTicketRef.current = null;
+    bridgeWsBoundTicketRef.current = null;
+    localToyPolicyCooldownUntilRef.current = {};
+    setLocalToyPolicyCooldownEpoch((e) => e + 1);
   }, []);
 
   const closeSocket = useCallback(() => {
     activeBridgeClientSerialRef.current = -1;
+    bridgeWsBoundTicketRef.current = null;
     if (lovenseClientRef.current) {
       lovenseClientRef.current.disconnect();
       lovenseClientRef.current = null;
     }
+    /** Orphan bridge sockets (no ref) still hold singletonInTab — always clear on tear-down. */
+    closeBridgeWebSocketInTab();
   }, []);
 
   useEffect(() => {
@@ -438,8 +457,8 @@ export function useBridgeSession(options: {
 
   const setupWebSocket = useCallback(
     (ticket: string, isHostRole: boolean) => {
+      if (!enabledRef.current) return;
       roleRef.current = isHostRole ? 'host' : 'guest';
-      roomSessionTicketRef.current = ticket;
       if (!BRIDGE_WS_BASE) {
         setStatus('error');
         setError('Partner bridge server is not configured.');
@@ -448,7 +467,25 @@ export function useBridgeSession(options: {
       const fromAutoReconnect = bridgeReconnectSetupRef.current;
       bridgeReconnectSetupRef.current = false;
       const bridgeGenAtSetup = readBridgeGen();
+      roomSessionTicketRef.current = ticket;
+
+      const existing = lovenseClientRef.current;
+      if (
+        existing &&
+        existing.isWebSocketActive() &&
+        bridgeWsBoundTicketRef.current === ticket &&
+        readBridgeGen() === bridgeGenAtSetup
+      ) {
+        if (fromAutoReconnect && existing.isSocketIoConnected) {
+          setBridgeSessionRecovery('ok');
+          setSocketIoConnected(true);
+          setStatus((prev) => (prev === 'idle' ? 'idle' : 'online'));
+        }
+        return;
+      }
+
       closeSocket();
+      roomSessionTicketRef.current = ticket;
       if (readBridgeGen() !== bridgeGenAtSetup) {
         return;
       }
@@ -679,7 +716,23 @@ export function useBridgeSession(options: {
           }
         },
       });
+      // Register immediately so a concurrent setupWebSocket hits closeSocket and disconnects this instance.
+      lovenseClientRef.current = client;
+      bridgeWsBoundTicketRef.current = ticket;
       if (readBridgeGen() !== bridgeGenAtSetup) {
+        activeBridgeClientSerialRef.current = -1;
+        try {
+          client.disconnect();
+        } catch {
+          /* ignore */
+        }
+        lovenseClientRef.current = null;
+        bridgeWsBoundTicketRef.current = null;
+        return;
+      }
+      activeBridgeClientSerialRef.current = myClientSerial;
+      if (lovenseClientRef.current !== client) {
+        activeBridgeClientSerialRef.current = -1;
         try {
           client.disconnect();
         } catch {
@@ -687,9 +740,7 @@ export function useBridgeSession(options: {
         }
         return;
       }
-      lovenseClientRef.current = client;
-      activeBridgeClientSerialRef.current = myClientSerial;
-      client.connect(wsUrl);
+      client.connect(wsUrl, { singletonInTab: true });
     },
     [closeSocket, scheduleBridgeReconnect, notificationTitle, readBridgeGen]
   );
@@ -733,46 +784,78 @@ export function useBridgeSession(options: {
   }, [socketIoConnected, selfSessionReady, roomId]);
 
   const startPreflightSession = useCallback(async () => {
-    if (!BRIDGE_AVAILABLE || preflightHostTicketRef.current || roomId !== null) return;
+    if (!BRIDGE_AVAILABLE || roomId !== null) return;
+    if (preflightHostTicketRef.current) return;
+
+    const existing = preflightSessionPromiseRef.current;
+    if (existing) {
+      await existing;
+      return;
+    }
+
     const gen0 = readBridgeGen();
+    const inflightGen = preflightAbortGenerationRef.current;
+    const stillValid = () =>
+      inflightGen === preflightAbortGenerationRef.current && readBridgeGen() === gen0 && enabledRef.current;
+
     preflightAbortRef.current?.abort();
     const ac = new AbortController();
     preflightAbortRef.current = ac;
     setPreparingSession(true);
     setError(null);
     setStatus('connecting');
-    try {
-      const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostDisplayName: null }),
-        signal: ac.signal,
-      });
-      if (readBridgeGen() !== gen0) return;
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `Failed to start partner session (status ${res.status})`);
+
+    const promiseSlot: { current: Promise<void> | null } = { current: null };
+    const p = (async () => {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostDisplayName: null }),
+          signal: ac.signal,
+        });
+        if (!stillValid()) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error((body as { error?: string }).error || `Failed to start partner session (status ${res.status})`);
+        }
+        const json = (await res.json()) as { roomId: string; pairCode: string; hostTicket: string };
+        if (!stillValid()) return;
+        preflightRoomIdRef.current = json.roomId;
+        preflightPairCodeRef.current = json.pairCode;
+        preflightHostTicketRef.current = json.hostTicket;
+        await registerLovenseWithBridge(json.hostTicket);
+        if (!stillValid()) return;
+        setupWebSocket(json.hostTicket, true);
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        if (e instanceof Error && e.name === 'AbortError') return;
+        if (!stillValid()) return;
+        setStatus('error');
+        setError(e instanceof Error ? e.message : 'Failed to prepare partner session.');
+      } finally {
+        if (preflightAbortRef.current === ac) {
+          preflightAbortRef.current = null;
+        }
+        setPreparingSession(false);
+        if (preflightSessionPromiseRef.current === promiseSlot.current) {
+          preflightSessionPromiseRef.current = null;
+        }
       }
-      const json = (await res.json()) as { roomId: string; pairCode: string; hostTicket: string };
-      if (readBridgeGen() !== gen0) return;
-      preflightRoomIdRef.current = json.roomId;
-      preflightPairCodeRef.current = json.pairCode;
-      preflightHostTicketRef.current = json.hostTicket;
-      await registerLovenseWithBridge(json.hostTicket);
-      if (readBridgeGen() !== gen0) return;
-      setupWebSocket(json.hostTicket, true);
-    } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === 'AbortError') return;
-      if (e instanceof Error && e.name === 'AbortError') return;
-      setStatus('error');
-      setError(e instanceof Error ? e.message : 'Failed to prepare partner session.');
-    } finally {
-      if (preflightAbortRef.current === ac) {
-        preflightAbortRef.current = null;
-      }
-      setPreparingSession(false);
-    }
+    })();
+
+    promiseSlot.current = p;
+    preflightSessionPromiseRef.current = p;
+    await p;
   }, [roomId, setupWebSocket, readBridgeGen]);
+
+  /** Invalidate in-flight preflight whenever partner gate or room changes (effect below had no cleanup on early return). */
+  useEffect(() => {
+    return () => {
+      preflightAbortGenerationRef.current += 1;
+      preflightAbortRef.current?.abort();
+    };
+  }, [enabled, roomId, startPreflightSession]);
 
   useEffect(() => {
     if (!enabled || roomId !== null) return;
@@ -788,6 +871,21 @@ export function useBridgeSession(options: {
       return;
     }
     try {
+      if (preflightRoomIdRef.current && preflightPairCodeRef.current) {
+        setRoomId(preflightRoomIdRef.current);
+        setPairCode(preflightPairCodeRef.current);
+        setIsHost(true);
+        setStatus(peerConnected ? 'online' : 'waiting_partner');
+        return;
+      }
+      const pendingPreflight = preflightSessionPromiseRef.current;
+      if (pendingPreflight) {
+        try {
+          await pendingPreflight;
+        } catch {
+          /* aborted or failed — may promote below or fall back to POST */
+        }
+      }
       if (preflightRoomIdRef.current && preflightPairCodeRef.current) {
         setRoomId(preflightRoomIdRef.current);
         setPairCode(preflightPairCodeRef.current);
@@ -836,6 +934,9 @@ export function useBridgeSession(options: {
     }
     try {
       if (preflightHostTicketRef.current) {
+        preflightAbortGenerationRef.current += 1;
+        preflightAbortRef.current?.abort();
+        preflightSessionPromiseRef.current = null;
         closeSocket();
         preflightRoomIdRef.current = null;
         preflightPairCodeRef.current = null;
@@ -999,7 +1100,20 @@ export function useBridgeSession(options: {
     sendBridgeSetToyRules,
   ]);
 
+  const isLocalToyPolicyToggleFrozen = useCallback(
+    (toyId: string) => (localToyPolicyCooldownUntilRef.current[toyId] ?? 0) > Date.now(),
+    [localToyPolicyCooldownEpoch]
+  );
+
   const toggleLocalToyEnabled = useCallback((toyId: string) => {
+    const now = Date.now();
+    if ((localToyPolicyCooldownUntilRef.current[toyId] ?? 0) > now) return;
+    localToyPolicyCooldownUntilRef.current[toyId] = now + LOCAL_TOY_POLICY_UI_COOLDOWN_MS;
+    setLocalToyPolicyCooldownEpoch((e) => e + 1);
+    window.setTimeout(() => {
+      delete localToyPolicyCooldownUntilRef.current[toyId];
+      setLocalToyPolicyCooldownEpoch((e) => e + 1);
+    }, LOCAL_TOY_POLICY_UI_COOLDOWN_MS);
     setLocalEnabledToyIds((prev) => (prev.includes(toyId) ? prev.filter((id) => id !== toyId) : [...prev, toyId]));
   }, []);
 
@@ -1014,6 +1128,7 @@ export function useBridgeSession(options: {
     localToysFromBridge,
     localEnabledToyIds,
     toggleLocalToyEnabled,
+    isLocalToyPolicyToggleFrozen,
     partnerEnabledToyIds,
     partnerLimits,
     selfQrUrl,

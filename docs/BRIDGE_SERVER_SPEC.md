@@ -187,7 +187,7 @@ npm run bridge:cf:deploy
 
 - **`bridge_set_toy_rules`:** If `maxPower` is present, it must be an integer **1–100**; otherwise the whole message is rejected (no partial apply).
 - **`limits`:** Every numeric value must be **≥ 1** (and ≤ 100); otherwise the whole message is rejected.
-- **Enable/disable flood:** For each `toyId`, changing whether it appears in `enabledToyIds` is allowed at most **once per second** per toy and per role. If any toy violates this, the **entire** rules update is rejected (no force-stop side effects).
+- **Enable/disable flood:** For each `toyId`, changing whether it appears in `enabledToyIds` is allowed at most **once per ~0.9 s** per toy and per role (server interval **900 ms**). If any toy violates this, the **entire** rules update is rejected (no force-stop side effects). The app should also **cool down the toggle UI for ~1 s** per toy so it stays in sync with the server.
 - **Forwarded commands:** After per-feature caps and global `maxPower` scaling, non-`Stop` actions clamp scaled feature levels so a positive input level never becomes **0** (minimum effective level 1 when the source level was &gt; 0).
 
 ## 5.3 Symmetric command gating

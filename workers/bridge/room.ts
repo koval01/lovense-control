@@ -48,7 +48,8 @@ const PONG = '3';
 const WS_MESSAGE_MAX_BYTES = 256 * 1024;
 const FORWARD_ONLY_EVENTS = new Set([BRIDGE_PING, BRIDGE_PONG, BRIDGE_CHAT_TYPING]);
 const PING_INTERVAL_MS = 20_000;
-const TOY_ENABLE_MIN_INTERVAL_MS = 1000;
+/** Min time between enable/disable toggles for the same toyId (same role). */
+const TOY_ENABLE_MIN_INTERVAL_MS = 900;
 
 export interface Env {
   JWT_SECRET: string;
@@ -85,7 +86,7 @@ export class BridgeRoom extends DurableObject<Env> {
   private chatBuffer: { text: string; ts: number; role: 'host' | 'guest' }[] = [];
   private lastHostChatTs = 0;
   private lastGuestChatTs = 0;
-  /** Last time each toyId was enabled/disabled in rules (per role); anti-flood 1/s per toy. */
+  /** Last time each toyId was enabled/disabled in rules (per role); anti-flood (see TOY_ENABLE_MIN_INTERVAL_MS). */
   private hostToyEnableToggleAtMs = new Map<string, number>();
   private guestToyEnableToggleAtMs = new Map<string, number>();
 
@@ -491,12 +492,12 @@ export class BridgeRoom extends DurableObject<Env> {
     prev: Set<string> | null,
     next: Set<string>
   ): boolean {
-    if (!prev) return true;
+    const prevS = prev ?? new Set<string>();
     const now = Date.now();
     const map = role === 'host' ? this.hostToyEnableToggleAtMs : this.guestToyEnableToggleAtMs;
-    const all = new Set<string>([...prev, ...next]);
+    const all = new Set<string>([...prevS, ...next]);
     for (const id of all) {
-      if (prev.has(id) === next.has(id)) continue;
+      if (prevS.has(id) === next.has(id)) continue;
       const last = map.get(id) ?? 0;
       if (now - last < TOY_ENABLE_MIN_INTERVAL_MS) return false;
     }

@@ -110,6 +110,7 @@ export const zhTranslations: TranslationMap = {
   partnerTheirToysTitle: '伙伴的玩具',
   partnerToyReadOnly: '伙伴模式下仅可查看',
   partnerModeToyDisabledByOwner: '由伙伴禁用',
+  partnerToyPolicyCooldownHint: '正在更新…请稍候再切换。',
   partnerLimitLabel: '伙伴上限',
   partnerChatPlaceholder: '消息...',
   partnerChatSend: '发送',

@@ -17,6 +17,8 @@ export interface StatusOnlineViewProps {
   localToys?: Record<string, Toy>;
   localEnabledToyIds?: string[];
   onToggleLocalToy?: (toyId: string) => void;
+  /** Partner “my toys”: freeze toggle while policy cooldown active. */
+  isLocalToyPolicyToggleFrozen?: (toyId: string) => boolean;
   children: React.ReactNode;
   /** Partner mode: toy IDs the partner enabled for us; others show as disabled. */
   partnerEnabledToyIds?: string[];
@@ -32,6 +34,7 @@ export function StatusOnlineView({
   localToys,
   localEnabledToyIds,
   onToggleLocalToy,
+  isLocalToyPolicyToggleFrozen,
   children,
   partnerEnabledToyIds,
   emptyStateTitleKey,
@@ -68,6 +71,7 @@ export function StatusOnlineView({
                 activeToyIds={localEnabledToyIds}
                 isMobile={isMobile}
                 onToggleToy={onToggleLocalToy}
+                isToyPolicyToggleFrozen={isLocalToyPolicyToggleFrozen}
                 sectionTitleKey="myToys"
               />
               <OnlineToyGrid

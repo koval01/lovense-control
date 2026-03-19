@@ -486,6 +486,7 @@ export function HomePage() {
             onOpenLanguage={() => setActiveSheet('language')}
             onToggleToy={() => {}}
             onToggleLocalToy={bridge.toggleLocalToyEnabled}
+            isLocalToyPolicyToggleFrozen={bridge.isLocalToyPolicyToggleFrozen}
             errorSecondaryAction={
               mode === 'partner'
                 ? { label: t('partnerModeExit'), onClick: () => { bridge.disconnect(); setModeAndHash('unselected'); } }

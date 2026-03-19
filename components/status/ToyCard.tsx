@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { Lock, Zap } from 'lucide-react';
+import { Loader2, Lock, Zap } from 'lucide-react';
 import type { Toy } from '@/lib/lovense-domain';
 import { getToyIcon } from '@/lib/toy-icons';
 import { BatteryIndicator } from '@/components/status/BatteryIndicator';
@@ -15,37 +15,45 @@ export interface ToyCardProps {
   disabledByPartner?: boolean;
   /** When true, card is informational and cannot be toggled. */
   readOnly?: boolean;
+  /** Partner: policy update in progress; button frozen with spinner. */
+  policyToggleCooldown?: boolean;
 }
 
-export function ToyCard({ toy, isActive, onToggle, disabledByPartner, readOnly }: ToyCardProps) {
+export function ToyCard({ toy, isActive, onToggle, disabledByPartner, readOnly, policyToggleCooldown }: ToyCardProps) {
   const iconSrc = getToyIcon(toy.name);
   const { t } = useI18n();
   const disabledByOwner = disabledByPartner === true;
-  const nonInteractive = disabledByOwner || readOnly === true;
+  const frozenPolicy = policyToggleCooldown === true;
+  const nonInteractive = disabledByOwner || readOnly === true || frozenPolicy;
 
   return (
     <button
       type="button"
       onClick={() => !nonInteractive && onToggle(toy.id)}
       aria-pressed={isActive}
+      aria-busy={frozenPolicy}
       disabled={nonInteractive}
       className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 rounded-xl md:rounded-2xl border md:border-[1.5px] transition-all ${
-        disabledByOwner
-          ? 'bg-[var(--vkui--color_background_tertiary)] border-[var(--vkui--color_separator_secondary)] opacity-60 cursor-not-allowed'
-          : isActive
-            ? 'bg-[var(--app-surface-soft)] border-[var(--app-accent)] shadow-[0_0_0_1px_rgba(242,12,127,0.35)]'
-            : `bg-[var(--vkui--color_background_tertiary)]/80 border-[var(--vkui--color_separator_secondary)] ${
-                readOnly ? '' : 'hover:border-[var(--vkui--color_separator_secondary)]'
-              }`
+        frozenPolicy
+          ? 'bg-[var(--vkui--color_background_tertiary)]/90 border-[var(--vkui--color_separator_secondary)] opacity-85 cursor-wait'
+          : disabledByOwner
+            ? 'bg-[var(--vkui--color_background_tertiary)] border-[var(--vkui--color_separator_secondary)] opacity-60 cursor-not-allowed'
+            : isActive
+              ? 'bg-[var(--app-surface-soft)] border-[var(--app-accent)] shadow-[0_0_0_1px_rgba(242,12,127,0.35)]'
+              : `bg-[var(--vkui--color_background_tertiary)]/80 border-[var(--vkui--color_separator_secondary)] ${
+                  readOnly ? '' : 'hover:border-[var(--vkui--color_separator_secondary)]'
+                }`
       }`}
       title={
-        disabledByPartner
-          ? t('partnerModeToyDisabledByOwner')
-          : readOnly
-            ? t('partnerToyReadOnly')
-            : isActive
-              ? 'Toy enabled'
-              : 'Toy muted'
+        frozenPolicy
+          ? t('partnerToyPolicyCooldownHint')
+          : disabledByPartner
+            ? t('partnerModeToyDisabledByOwner')
+            : readOnly
+              ? t('partnerToyReadOnly')
+              : isActive
+                ? 'Toy enabled'
+                : 'Toy muted'
       }
     >
       <div className="w-8 h-8 md:w-10 md:h-10 bg-[var(--vkui--color_background_content)] rounded-md md:rounded-lg flex items-center justify-center overflow-hidden relative">
@@ -58,7 +66,11 @@ export function ToyCard({ toy, isActive, onToggle, disabledByPartner, readOnly }
       <div className="min-w-0 flex-1">
         <div className="text-xs md:text-sm font-semibold text-[var(--vkui--color_text_primary)] truncate flex items-center gap-1">
           {toy.name}
-          {disabledByOwner ? <Lock className="w-3 h-3 shrink-0 text-[var(--app-text-secondary)]" aria-hidden /> : null}
+          {frozenPolicy ? (
+            <Loader2 className="w-3 h-3 shrink-0 text-[var(--app-accent)] animate-spin" aria-hidden />
+          ) : disabledByOwner ? (
+            <Lock className="w-3 h-3 shrink-0 text-[var(--app-text-secondary)]" aria-hidden />
+          ) : null}
         </div>
         <div className="text-xs text-[var(--app-text-secondary)] font-medium">
           <BatteryIndicator level={toy.battery} showPercent />

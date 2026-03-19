@@ -124,6 +124,7 @@ export const deTranslations: TranslationMap = {
   partnerTheirToysTitle: 'Toys des Partners',
   partnerToyReadOnly: 'Im Partnermodus nur Ansicht',
   partnerModeToyDisabledByOwner: 'Vom Partner deaktiviert',
+  partnerToyPolicyCooldownHint: 'Wird aktualisiert… bitte eine Sekunde warten, bevor Sie erneut umschalten.',
   partnerLimitLabel: 'Partner-Limit',
   partnerChatPlaceholder: 'Nachricht...',
   partnerChatSend: 'Senden',

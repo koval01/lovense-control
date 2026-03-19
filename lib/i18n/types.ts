@@ -109,6 +109,7 @@ export type TranslationKey =
   | 'partnerTheirToysTitle'
   | 'partnerToyReadOnly'
   | 'partnerModeToyDisabledByOwner'
+  | 'partnerToyPolicyCooldownHint'
   | 'partnerLimitLabel'
   | 'partnerChatPlaceholder'
   | 'partnerChatSend'

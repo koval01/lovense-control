@@ -123,6 +123,7 @@ export const beTranslations: TranslationMap = {
   partnerTheirToysTitle: 'Цацкі партнёра',
   partnerToyReadOnly: 'Толькі прагляд у рэжыме партнёра',
   partnerModeToyDisabledByOwner: 'Адключана партнёрам',
+  partnerToyPolicyCooldownHint: 'Абнаўленне… пачакайце секунду перад наступным пераключэннем.',
   partnerLimitLabel: 'Ліміт партнёра',
   partnerChatPlaceholder: 'Паведамленне...',
   partnerChatSend: 'Адправіць',

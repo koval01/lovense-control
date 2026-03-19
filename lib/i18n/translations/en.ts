@@ -117,6 +117,7 @@ export const enTranslations: TranslationMap = {
   partnerTheirToysTitle: "Partner's toys",
   partnerToyReadOnly: 'Read-only in partner mode',
   partnerModeToyDisabledByOwner: 'Disabled by partner',
+  partnerToyPolicyCooldownHint: 'Updating… wait a second before toggling again.',
   partnerLimitLabel: "Partner's limit",
   partnerChatPlaceholder: 'Message...',
   partnerChatSend: 'Send',

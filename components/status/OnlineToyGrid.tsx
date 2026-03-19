@@ -15,6 +15,8 @@ interface OnlineToyGridProps {
   partnerEnabledToyIds?: string[];
   readOnly?: boolean;
   sectionTitleKey?: TranslationKey;
+  /** Partner “my toys”: per-toy UI cooldown after toggling policy (sync with server rate limit). */
+  isToyPolicyToggleFrozen?: (toyId: string) => boolean;
 }
 
 export function OnlineToyGrid({
@@ -25,6 +27,7 @@ export function OnlineToyGrid({
   partnerEnabledToyIds,
   readOnly = false,
   sectionTitleKey,
+  isToyPolicyToggleFrozen,
 }: OnlineToyGridProps) {
   const { t } = useI18n();
   return (
@@ -64,6 +67,7 @@ export function OnlineToyGrid({
                 onToggle={onToggleToy}
                 disabledByPartner={disabledByPartner}
                 readOnly={readOnly}
+                policyToggleCooldown={isToyPolicyToggleFrozen?.(toy.id) === true}
               />
             </motion.div>
           );

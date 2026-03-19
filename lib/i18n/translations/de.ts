@@ -114,6 +114,12 @@ export const deTranslations: TranslationMap = {
   partnerModePartnerNoToys: 'Ihr Partner hat keine verbundenen Toys',
   partnerModePartnerNoToysHint: 'Bitten Sie Ihren Partner, die Toys in der Lovense-App zu verbinden.',
   partnerModeConnected: 'Verbunden',
+  partnerBridgeReconnecting: 'Verbindung verloren. Wiederherstellung wird versucht…',
+  partnerBridgePreflightReconnecting: 'Verbindung zum Server wird wiederhergestellt…',
+  partnerBridgeReconnectFailed:
+    'Bridge-Sitzung konnte nicht wiederhergestellt werden. Verlasse den Raum und tritt erneut bei oder kehre zum Hauptmenü zurück.',
+  partnerBridgePartnerDisconnectedWaiting:
+    'Verbindung zum Partner verloren. Befehle sind pausiert, bis der Partner wieder da ist.',
   selfModeExitToMenu: 'Zum Hauptmenü',
   partnerTheirToysTitle: 'Toys des Partners',
   partnerToyReadOnly: 'Im Partnermodus nur Ansicht',

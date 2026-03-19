@@ -113,6 +113,12 @@ export const beTranslations: TranslationMap = {
   partnerModePartnerNoToys: 'У вашага суразмоўніка няма падлучаных цацак',
   partnerModePartnerNoToysHint: 'Папросіце суразмоўніка падключыць цацкі ў дадатку Lovense.',
   partnerModeConnected: 'Падлучана',
+  partnerBridgeReconnecting: 'Злучэнне страчана. Спрабуем аднавіць…',
+  partnerBridgePreflightReconnecting: 'Аднаўляем падключэнне да сервера…',
+  partnerBridgeReconnectFailed:
+    'Не ўдалося аднавіць сесію моста. Выйдзіце з пакоя і падключыцеся зноў або вярніцеся ў галоўнае меню.',
+  partnerBridgePartnerDisconnectedWaiting:
+    'Сувязь з партнёрам страчана. Каманды адключаны, пакуль ён не адновіць злучэнне.',
   selfModeExitToMenu: 'Выхад у галоўнае меню',
   partnerTheirToysTitle: 'Цацкі партнёра',
   partnerToyReadOnly: 'Толькі прагляд у рэжыме партнёра',

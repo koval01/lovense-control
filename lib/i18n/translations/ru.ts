@@ -109,6 +109,12 @@ export const ruTranslations: TranslationMap = {
   partnerModePartnerNoToys: 'У вашего собеседника нет подключенных игрушек',
   partnerModePartnerNoToysHint: 'Попросите собеседника подключить игрушки в приложении Lovense.',
   partnerModeConnected: 'Подключено',
+  partnerBridgeReconnecting: 'Соединение потеряно. Пытаемся восстановить…',
+  partnerBridgePreflightReconnecting: 'Восстанавливаем подключение к серверу…',
+  partnerBridgeReconnectFailed:
+    'Не удалось восстановить сессию моста. Выйдите из комнаты и подключитесь снова или вернитесь в главное меню.',
+  partnerBridgePartnerDisconnectedWaiting:
+    'Связь с партнёром потеряна. Команды отключены, пока он не восстановит соединение.',
   selfModeExitToMenu: 'Выход в главное меню',
   partnerTheirToysTitle: 'Игрушки партнёра',
   partnerToyReadOnly: 'Только просмотр в режиме партнёра',

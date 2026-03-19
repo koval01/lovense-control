@@ -18,6 +18,11 @@ interface SocketUrlResponse {
 export interface ConnectionState {
   enabled: boolean;
   mode: ConnectionMode;
+  /**
+   * Bumped when entering or leaving partner mode so bridge hook can drop stale
+   * async work and avoid duplicate WebSockets (e.g. exit room → re-enter).
+   */
+  bridgeSocketGeneration: number;
   status: LovenseStatus;
   /** URL of Lovense-provided QR image (fallback when raw qrCode is missing). */
   qrUrl: string | null;
@@ -32,6 +37,7 @@ export interface ConnectionState {
 const initialState: ConnectionState = {
   enabled: true,
   mode: 'unselected',
+  bridgeSocketGeneration: 0,
   status: 'initializing',
   qrUrl: null,
   qrCode: null,
@@ -81,7 +87,14 @@ const connectionSlice = createSlice({
   initialState,
   reducers: {
     setMode(state, action: PayloadAction<ConnectionMode>) {
-      state.mode = action.payload;
+      const next = action.payload;
+      const prev = state.mode;
+      if (next !== prev) {
+        if (next === 'partner' || prev === 'partner') {
+          state.bridgeSocketGeneration += 1;
+        }
+        state.mode = next;
+      }
     },
     setEnabled(state, action: PayloadAction<boolean>) {
       state.enabled = action.payload;
@@ -127,6 +140,10 @@ const connectionSlice = createSlice({
       state.reconnectAttempt = 0;
       state.sessionStarted = false;
     },
+    /** Invalidate in-flight bridge work (e.g. full reset while still in partner mode). */
+    bumpBridgeSocketGeneration(state) {
+      state.bridgeSocketGeneration += 1;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -157,6 +174,7 @@ export const {
   resetReconnectAttempt,
   setSessionStarted,
   resetConnectionRuntime,
+  bumpBridgeSocketGeneration,
 } = connectionSlice.actions;
 
 export default connectionSlice.reducer;

@@ -75,7 +75,7 @@ export function useToyFeatures(
       const valid =
         typeof saved === 'number' &&
         Number.isFinite(saved) &&
-        saved >= 0 &&
+        saved >= 1 &&
         saved <= feature.maxLevel;
       nextLimits[feature.id] = valid ? saved : feature.maxLevel;
     });

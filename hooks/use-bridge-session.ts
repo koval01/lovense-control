@@ -15,11 +15,25 @@ import {
   stopNotificationTitleBlink,
   subscribeTabVisible,
 } from '@/lib/notification-utils';
+import { useAppDispatch, useAppStore } from '@/store/hooks';
+import { bumpBridgeSocketGeneration } from '@/store/slices/connectionSlice';
 
 type BridgeStatus = 'idle' | 'connecting' | 'waiting_partner' | 'online' | 'error';
 
 /** Partner menu before joining a room: wait for bridge → QR / auth → join & create UI. */
 export type PartnerSetupPhase = 'loading' | 'qr' | 'form';
+
+/** Bridge WebSocket session while in a room: auto-reconnect vs hard failure. */
+export type BridgeSessionRecovery = 'ok' | 'reconnecting' | 'failed';
+
+export class BridgeRegisterError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BridgeRegisterError';
+    this.status = status;
+  }
+}
 
 export type BridgeChatMessage =
   | {
@@ -180,7 +194,7 @@ async function registerLovenseWithBridge(ticket: string): Promise<void> {
     const body = await res.json().catch(() => ({}));
     const err = body as { error?: string; detail?: string };
     const msg = err.detail || err.error || `Bridge rejected session (${res.status})`;
-    throw new Error(msg);
+    throw new BridgeRegisterError(msg, res.status);
   }
 }
 
@@ -190,10 +204,11 @@ function maxPowerFromLimits(limits: Record<string, number> | undefined): number 
   let minPct = 100;
   for (const [featureId, value] of Object.entries(limits)) {
     const maxLevel = FEATURE_MAX_LEVELS[featureId] ?? 20;
-    const pct = Math.round((value / maxLevel) * 100);
+    const pct = Math.round((Math.max(1, value) / maxLevel) * 100);
     minPct = Math.min(minPct, pct);
   }
-  return minPct >= 100 ? undefined : minPct;
+  if (minPct >= 100) return undefined;
+  return Math.max(1, minPct);
 }
 
 export function useBridgeSession(options: {
@@ -207,6 +222,9 @@ export function useBridgeSession(options: {
   notificationTitle?: string;
 }) {
   const { enabled, localToys, onIncomingCommand, activeToyIds, limits, notificationTitle = '● New message' } = options;
+  const reduxStore = useAppStore();
+  const dispatch = useAppDispatch();
+  const readBridgeGen = useCallback(() => reduxStore.getState().connection.bridgeSocketGeneration, [reduxStore]);
   const [status, setStatus] = useState<BridgeStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState<string | null>(null);
@@ -227,6 +245,8 @@ export function useBridgeSession(options: {
   const [socketIoConnected, setSocketIoConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState<BridgeChatMessage[]>([]);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  /** True after the other peer has been connected at least once this session (for “partner dropped” copy). */
+  const [partnerEverConnected, setPartnerEverConnected] = useState(false);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleRef = useRef<'host' | 'guest'>('host');
@@ -234,8 +254,31 @@ export function useBridgeSession(options: {
   const preflightRoomIdRef = useRef<string | null>(null);
   const preflightPairCodeRef = useRef<string | null>(null);
   const preflightHostTicketRef = useRef<string | null>(null);
+  /** Aborts in-flight POST /rooms for preflight when leaving partner mode or starting a new preflight. */
+  const preflightAbortRef = useRef<AbortController | null>(null);
+  /** Monotonic id per bridge WS instance; closeSocket sets active to -1 so stale onClose cannot fire reconnect. */
+  const bridgeClientSeqRef = useRef(0);
+  const activeBridgeClientSerialRef = useRef(0);
   /** Synchronous guard so a late QR payload cannot flash after session becomes ready. */
   const selfSessionReadyRef = useRef(false);
+  const roomIdRef = useRef<string | null>(null);
+  const isHostRef = useRef(false);
+  const enabledRef = useRef(false);
+  /** True while calling disconnect() / leaving partner mode so socket close does not auto-reconnect. */
+  const intentionalDisconnectRef = useRef(false);
+  /** JWT used for the current bridge WebSocket (reconnect / register-session). */
+  const roomSessionTicketRef = useRef<string | null>(null);
+  /** Bumped to cancel in-flight reconnect backoff when a new close happens or user exits. */
+  const reconnectGenRef = useRef(0);
+  const setupWebSocketRef = useRef<(ticket: string, isHostRole: boolean) => void>(() => {});
+  /** Incremented on each setupWebSocket so stale onClose/onError from replaced sockets are ignored. */
+  const bridgeConnectionEpochRef = useRef(0);
+  /** Next setupWebSocket call is auto-reconnect: avoid flipping UI to full-screen "connecting". */
+  const bridgeReconnectSetupRef = useRef(false);
+
+  const [bridgeSessionRecovery, setBridgeSessionRecovery] = useState<BridgeSessionRecovery>('ok');
+  /** After Lovense app auth once, never show QR setup again until full reset (avoids UI flicker). */
+  const [partnerAuthLatch, setPartnerAuthLatch] = useState(false);
 
   const lovenseClientRef = useRef<LovenseWsClient | null>(null);
 
@@ -251,11 +294,13 @@ export function useBridgeSession(options: {
     if (error && !socketIoConnected && !preparingSession) return 'form';
     if (preparingSession) return 'loading';
     if (!socketIoConnected) return 'loading';
-    if (selfSessionReady) return 'form';
+    if (selfSessionReady || partnerAuthLatch) return 'form';
     return 'qr';
-  }, [roomId, error, preparingSession, socketIoConnected, selfSessionReady]);
+  }, [roomId, error, preparingSession, socketIoConnected, selfSessionReady, partnerAuthLatch]);
 
   const resetState = useCallback(() => {
+    preflightAbortRef.current?.abort();
+    preflightAbortRef.current = null;
     setStatus('idle');
     setError(null);
     setPairCode(null);
@@ -275,8 +320,13 @@ export function useBridgeSession(options: {
     setSelfSessionReady(false);
     setPreparingSession(false);
     setRttMs(null);
+    setBridgeSessionRecovery('ok');
+    setPartnerAuthLatch(false);
+    roomSessionTicketRef.current = null;
+    reconnectGenRef.current += 1;
     setChatMessages([]);
     setPartnerTyping(false);
+    setPartnerEverConnected(false);
     audioObjectUrlsRef.current.forEach((url) => {
       URL.revokeObjectURL(url);
     });
@@ -295,6 +345,7 @@ export function useBridgeSession(options: {
   }, []);
 
   const closeSocket = useCallback(() => {
+    activeBridgeClientSerialRef.current = -1;
     if (lovenseClientRef.current) {
       lovenseClientRef.current.disconnect();
       lovenseClientRef.current = null;
@@ -302,9 +353,23 @@ export function useBridgeSession(options: {
   }, []);
 
   useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
+
+  useEffect(() => {
     if (!enabled) {
+      intentionalDisconnectRef.current = true;
       closeSocket();
       resetState();
+      intentionalDisconnectRef.current = false;
       return;
     }
     if (!BRIDGE_AVAILABLE) {
@@ -312,29 +377,115 @@ export function useBridgeSession(options: {
       setError('Partner bridge server is not configured.');
     }
     return () => {
+      intentionalDisconnectRef.current = true;
       closeSocket();
+      intentionalDisconnectRef.current = false;
     };
   }, [enabled, closeSocket, resetState]);
+
+  const scheduleBridgeReconnect = useCallback(() => {
+    const reduxGenAtSchedule = reduxStore.getState().connection.bridgeSocketGeneration;
+    const loopId = (reconnectGenRef.current += 1);
+    /** In-room or host preflight (QR / join form before promote). */
+    const stillNeedsBridgeWs = () =>
+      roomIdRef.current != null || preflightHostTicketRef.current != null;
+    void (async () => {
+      let delay = 1000;
+      const maxDelay = 30_000;
+      while (
+        loopId === reconnectGenRef.current &&
+        !intentionalDisconnectRef.current &&
+        stillNeedsBridgeWs() &&
+        reduxStore.getState().connection.bridgeSocketGeneration === reduxGenAtSchedule
+      ) {
+        const ticket = roomSessionTicketRef.current;
+        if (!ticket) {
+          if (loopId === reconnectGenRef.current) {
+            setBridgeSessionRecovery('failed');
+            setStatus('error');
+            setError('No session ticket. Leave the room and join again.');
+          }
+          break;
+        }
+        try {
+          await registerLovenseWithBridge(ticket);
+          if (
+            loopId !== reconnectGenRef.current ||
+            intentionalDisconnectRef.current ||
+            !stillNeedsBridgeWs() ||
+            reduxStore.getState().connection.bridgeSocketGeneration !== reduxGenAtSchedule
+          ) {
+            return;
+          }
+          bridgeReconnectSetupRef.current = true;
+          setupWebSocketRef.current(ticket, isHostRef.current);
+          return;
+        } catch (e) {
+          if (loopId !== reconnectGenRef.current) return;
+          const st = e instanceof BridgeRegisterError ? e.status : 0;
+          if (st === 401) {
+            setBridgeSessionRecovery('failed');
+            setStatus('error');
+            setError(e instanceof Error ? e.message : 'Session expired. Leave the room and sign in again.');
+            return;
+          }
+          await new Promise((r) => setTimeout(r, delay));
+          delay = Math.min(delay * 2, maxDelay);
+        }
+      }
+    })();
+  }, [reduxStore]);
 
   const setupWebSocket = useCallback(
     (ticket: string, isHostRole: boolean) => {
       roleRef.current = isHostRole ? 'host' : 'guest';
+      roomSessionTicketRef.current = ticket;
       if (!BRIDGE_WS_BASE) {
         setStatus('error');
         setError('Partner bridge server is not configured.');
         return;
       }
+      const fromAutoReconnect = bridgeReconnectSetupRef.current;
+      bridgeReconnectSetupRef.current = false;
+      const bridgeGenAtSetup = readBridgeGen();
       closeSocket();
-      setStatus('connecting');
+      if (readBridgeGen() !== bridgeGenAtSetup) {
+        return;
+      }
+      if (!fromAutoReconnect) {
+        setStatus('connecting');
+      }
       setError(null);
 
+      const myEpoch = (bridgeConnectionEpochRef.current += 1);
+      const myClientSerial = (bridgeClientSeqRef.current += 1);
       const wsUrl = `${BRIDGE_WS_BASE}/ws?ticket=${encodeURIComponent(ticket)}`;
       const client = new LovenseWsClient({
         onSocketClose: () => {
+          if (myClientSerial !== activeBridgeClientSerialRef.current) return;
+          if (myEpoch !== bridgeConnectionEpochRef.current) return;
+          if (readBridgeGen() !== bridgeGenAtSetup) return;
           setPeerConnected(false);
           setSocketIoConnected(false);
           setRttMs(null);
-          if (enabled) {
+          if (intentionalDisconnectRef.current) {
+            if (!enabledRef.current) {
+              setStatus('idle');
+              setError(null);
+            }
+            return;
+          }
+          const shouldTryReconnect =
+            enabledRef.current &&
+            Boolean(roomSessionTicketRef.current) &&
+            (roomIdRef.current != null || preflightHostTicketRef.current != null);
+          if (shouldTryReconnect) {
+            setBridgeSessionRecovery('reconnecting');
+            setError(null);
+            scheduleBridgeReconnect();
+            return;
+          }
+          if (enabledRef.current) {
             setStatus((prev) => (prev === 'idle' ? 'idle' : 'error'));
             setError((prev) => prev || 'Connection lost. Use Exit to leave and try again.');
           } else {
@@ -343,14 +494,34 @@ export function useBridgeSession(options: {
           }
         },
         onSocketError: () => {
+          if (myClientSerial !== activeBridgeClientSerialRef.current) return;
+          if (myEpoch !== bridgeConnectionEpochRef.current) return;
+          if (readBridgeGen() !== bridgeGenAtSetup) return;
+          if (
+            !intentionalDisconnectRef.current &&
+            enabledRef.current &&
+            roomSessionTicketRef.current &&
+            (roomIdRef.current != null || preflightHostTicketRef.current != null)
+          ) {
+            setBridgeSessionRecovery('reconnecting');
+            setError(null);
+            scheduleBridgeReconnect();
+            return;
+          }
           setStatus('error');
           setError('Error while communicating with tunnel.');
         },
         onSocketIoConnected: () => {
+          if (myClientSerial !== activeBridgeClientSerialRef.current) return;
+          if (myEpoch !== bridgeConnectionEpochRef.current) return;
+          if (readBridgeGen() !== bridgeGenAtSetup) return;
           setStatus((prev) => (prev === 'idle' ? 'idle' : 'online'));
           setSocketIoConnected(true);
+          setBridgeSessionRecovery('ok');
         },
         onSocketIoEvent: (event, payloadData) => {
+          if (myClientSerial !== activeBridgeClientSerialRef.current) return;
+          if (readBridgeGen() !== bridgeGenAtSetup) return;
           const payload = payloadData as {
             status?: number;
             toyList?: RawToy[];
@@ -399,6 +570,7 @@ export function useBridgeSession(options: {
             if (payload?.status === 1) {
               selfSessionReadyRef.current = true;
               setSelfSessionReady(true);
+              setPartnerAuthLatch(true);
               setSelfQrUrl(null);
               setSelfQrCode(null);
             } else {
@@ -424,6 +596,7 @@ export function useBridgeSession(options: {
           if (event === 'bridge_partner_status' && typeof payload?.connected === 'boolean') {
             setPeerConnected(payload.connected);
             if (payload.connected) {
+              setPartnerEverConnected(true);
               setStatus((prev) => (prev === 'connecting' ? 'online' : prev));
             } else {
               setStatus('waiting_partner');
@@ -439,6 +612,7 @@ export function useBridgeSession(options: {
           }
           if (event === 'bridge_ping' && typeof payload?.ts === 'number') {
             setPeerConnected(true);
+            setPartnerEverConnected(true);
             client.sendEvent('bridge_pong', { id: payload.id, ts: payload.ts });
           }
           if (event === 'bridge_chat_message' && payload?.text != null && typeof payload?.ts === 'number') {
@@ -505,11 +679,22 @@ export function useBridgeSession(options: {
           }
         },
       });
+      if (readBridgeGen() !== bridgeGenAtSetup) {
+        try {
+          client.disconnect();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       lovenseClientRef.current = client;
+      activeBridgeClientSerialRef.current = myClientSerial;
       client.connect(wsUrl);
     },
-    [closeSocket, enabled, notificationTitle]
+    [closeSocket, scheduleBridgeReconnect, notificationTitle, readBridgeGen]
   );
+
+  setupWebSocketRef.current = setupWebSocket;
 
   useEffect(() => {
     const cleanup = subscribeTabVisible();
@@ -549,6 +734,10 @@ export function useBridgeSession(options: {
 
   const startPreflightSession = useCallback(async () => {
     if (!BRIDGE_AVAILABLE || preflightHostTicketRef.current || roomId !== null) return;
+    const gen0 = readBridgeGen();
+    preflightAbortRef.current?.abort();
+    const ac = new AbortController();
+    preflightAbortRef.current = ac;
     setPreparingSession(true);
     setError(null);
     setStatus('connecting');
@@ -557,24 +746,33 @@ export function useBridgeSession(options: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostDisplayName: null }),
+        signal: ac.signal,
       });
+      if (readBridgeGen() !== gen0) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error || `Failed to start partner session (status ${res.status})`);
       }
       const json = (await res.json()) as { roomId: string; pairCode: string; hostTicket: string };
+      if (readBridgeGen() !== gen0) return;
       preflightRoomIdRef.current = json.roomId;
       preflightPairCodeRef.current = json.pairCode;
       preflightHostTicketRef.current = json.hostTicket;
       await registerLovenseWithBridge(json.hostTicket);
+      if (readBridgeGen() !== gen0) return;
       setupWebSocket(json.hostTicket, true);
     } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      if (e instanceof Error && e.name === 'AbortError') return;
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to prepare partner session.');
     } finally {
+      if (preflightAbortRef.current === ac) {
+        preflightAbortRef.current = null;
+      }
       setPreparingSession(false);
     }
-  }, [roomId, setupWebSocket]);
+  }, [roomId, setupWebSocket, readBridgeGen]);
 
   useEffect(() => {
     if (!enabled || roomId !== null) return;
@@ -599,27 +797,31 @@ export function useBridgeSession(options: {
       }
       setStatus('connecting');
       setError(null);
+      const genCreate = readBridgeGen();
       const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostDisplayName: null }),
       });
+      if (readBridgeGen() !== genCreate) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error || `Failed to create room (status ${res.status})`);
       }
       const json = (await res.json()) as { roomId: string; pairCode: string; hostTicket: string };
+      if (readBridgeGen() !== genCreate) return;
       setRoomId(json.roomId);
       setPairCode(json.pairCode);
       setIsHost(true);
       setStatus('connecting');
       await registerLovenseWithBridge(json.hostTicket);
+      if (readBridgeGen() !== genCreate) return;
       setupWebSocket(json.hostTicket, true);
     } catch (e: unknown) {
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to create room.');
     }
-  }, [peerConnected, setupWebSocket]);
+  }, [peerConnected, setupWebSocket, readBridgeGen]);
 
   const joinRoom = useCallback(async (code: string) => {
     if (!BRIDGE_AVAILABLE) {
@@ -641,18 +843,22 @@ export function useBridgeSession(options: {
       }
       setStatus('connecting');
       setError(null);
+      const genJoin = readBridgeGen();
       const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pairCode: trimmed, guestDisplayName: null }),
       });
+      if (readBridgeGen() !== genJoin) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         const err = body as { error?: string; detail?: string };
         throw new Error(err.detail || err.error || `Failed to join room (status ${res.status})`);
       }
       const json = (await res.json()) as { roomId: string; guestTicket: string };
+      if (readBridgeGen() !== genJoin) return;
       await registerLovenseWithBridge(json.guestTicket);
+      if (readBridgeGen() !== genJoin) return;
       setRoomId(json.roomId);
       setPairCode(trimmed);
       setIsHost(false);
@@ -661,7 +867,7 @@ export function useBridgeSession(options: {
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to join room.');
     }
-  }, [closeSocket, setupWebSocket]);
+  }, [closeSocket, setupWebSocket, readBridgeGen]);
 
   function buildLovenseCommandPayload(
     toyId: string,
@@ -688,31 +894,36 @@ export function useBridgeSession(options: {
   const sendCommand = useCallback(
     (toyId: string, action: string, timeSec: number = 0, loopRunningSec?: number, loopPauseSec?: number) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected || !peerConnected) return;
+      if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected || !peerConnected) return;
       client.sendEvent(
         'basicapi_send_toy_command_ts',
         buildLovenseCommandPayload(toyId, action, timeSec, loopRunningSec, loopPauseSec)
       );
     },
-    [peerConnected]
+    [peerConnected, bridgeSessionRecovery]
   );
 
   const sendLovenseCommand = useCallback(
     (toyId: string, action: string, timeSec: number = 0, loopRunningSec?: number, loopPauseSec?: number) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected || !peerConnected) return;
+      if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected || !peerConnected) return;
       client.sendEvent(
         'basicapi_send_toy_command_ts',
         buildLovenseCommandPayload(toyId, action, timeSec, loopRunningSec, loopPauseSec)
       );
     },
-    [peerConnected]
+    [peerConnected, bridgeSessionRecovery]
   );
 
   const disconnect = useCallback(() => {
+    intentionalDisconnectRef.current = true;
+    reconnectGenRef.current += 1;
+    bridgeConnectionEpochRef.current += 1;
     closeSocket();
+    dispatch(bumpBridgeSocketGeneration());
     resetState();
-  }, [closeSocket, resetState]);
+    intentionalDisconnectRef.current = false;
+  }, [closeSocket, resetState, dispatch]);
 
   const sendChatMessage = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -720,14 +931,14 @@ export function useBridgeSession(options: {
     const { ok } = validateChatTextClient(trimmed);
     if (!ok) return;
     const client = lovenseClientRef.current;
-    if (!client?.isSocketIoConnected) return;
+    if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected) return;
     client.sendEvent('bridge_chat_message', { text: trimmed, ts: Date.now() });
-  }, []);
+  }, [bridgeSessionRecovery]);
 
   const sendChatVoice = useCallback(
     async (blob: Blob, mime: string, durationMs?: number) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected) return;
+      if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected) return;
       const ts = Date.now();
       const id = crypto.randomUUID();
       const arrayBuffer = await blob.arrayBuffer();
@@ -740,26 +951,26 @@ export function useBridgeSession(options: {
         ...(typeof durationMs === 'number' ? { durationMs } : {}),
       });
     },
-    []
+    [bridgeSessionRecovery]
   );
 
   const sendChatTyping = useCallback((typing: boolean) => {
     const client = lovenseClientRef.current;
-    if (!client?.isSocketIoConnected) return;
+    if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected) return;
     client.sendEvent('bridge_chat_typing', { typing });
-  }, []);
+  }, [bridgeSessionRecovery]);
 
   const sendBridgeSetToyRules = useCallback(
-    (payload: { enabledToyIds?: string[]; maxPower?: number }) => {
+    (payload: { enabledToyIds?: string[]; maxPower?: number; limits?: Record<string, number> }) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected) return;
+      if (bridgeSessionRecovery !== 'ok' || !client?.isSocketIoConnected) return;
       client.sendEvent('bridge_set_toy_rules', payload);
     },
-    []
+    [bridgeSessionRecovery]
   );
 
   useEffect(() => {
-    if (!lovenseClientRef.current?.isSocketIoConnected) return;
+    if (bridgeSessionRecovery !== 'ok' || !lovenseClientRef.current?.isSocketIoConnected) return;
     if (activeToyIds === undefined && limits === undefined) return;
     if (!hasSelfDeviceInfo) return;
     const myToyIds = Object.keys(localToysFromBridge);
@@ -767,7 +978,7 @@ export function useBridgeSession(options: {
     const localLimits: Record<string, number> = {};
     if (limits) {
       for (const [featureId, value] of Object.entries(limits)) {
-        if (localFeatureIdSet.has(featureId)) localLimits[featureId] = value;
+        if (localFeatureIdSet.has(featureId)) localLimits[featureId] = Math.max(1, value);
       }
     }
     const maxPower = maxPowerFromLimits(localLimits);
@@ -776,7 +987,17 @@ export function useBridgeSession(options: {
       ...(maxPower !== undefined && { maxPower }),
       ...(Object.keys(localLimits).length > 0 && { limits: localLimits }),
     });
-  }, [status, activeToyIds, limits, hasSelfDeviceInfo, localEnabledToyIds, localFeatureIdSet, localToysFromBridge, sendBridgeSetToyRules]);
+  }, [
+    bridgeSessionRecovery,
+    status,
+    activeToyIds,
+    limits,
+    hasSelfDeviceInfo,
+    localEnabledToyIds,
+    localFeatureIdSet,
+    localToysFromBridge,
+    sendBridgeSetToyRules,
+  ]);
 
   const toggleLocalToyEnabled = useCallback((toyId: string) => {
     setLocalEnabledToyIds((prev) => (prev.includes(toyId) ? prev.filter((id) => id !== toyId) : [...prev, toyId]));
@@ -799,6 +1020,9 @@ export function useBridgeSession(options: {
     selfQrCode,
     selfSessionReady,
     partnerSetupPhase,
+    bridgeSessionRecovery,
+    partnerEverConnected,
+    socketIoConnected,
     preparingSession,
     rttMs,
     chatMessages,

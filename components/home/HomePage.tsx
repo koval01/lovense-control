@@ -201,6 +201,7 @@ export function HomePage() {
   } else if (mode === 'partner' && !bridge.roomId) {
     viewKey = 'partner-setup';
     const setupPhase = bridge.partnerSetupPhase;
+    const setupRecovery = bridge.bridgeSessionRecovery;
     viewNode = (
       <div id="main-content" className="h-full min-h-screen bg-[var(--app-bg)] flex items-center justify-center p-5">
         <div className="w-full max-w-xl rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg-elevated)] p-5 md:p-6">
@@ -208,7 +209,38 @@ export function HomePage() {
             {t('partnerModeTitle')}
           </h1>
 
-          {setupPhase === 'loading' ? (
+          {setupRecovery === 'reconnecting' ? (
+            <div className="mt-6 flex flex-col items-stretch gap-4" role="status" aria-busy="true">
+              <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-5 flex flex-col items-center gap-3 text-center">
+                <span className="inline-block h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-amber-500/40 border-t-amber-600" />
+                <p className="text-sm text-[var(--app-text-primary)]">{t('partnerBridgePreflightReconnecting')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModeAndHash('unselected')}
+                className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-bg)] transition-colors"
+              >
+                {t('partnerModeBack')}
+              </button>
+            </div>
+          ) : null}
+
+          {setupRecovery === 'failed' ? (
+            <div className="mt-6 flex flex-col items-stretch gap-4" role="alert">
+              <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-4 text-sm text-[var(--app-text-primary)]">
+                {t('partnerBridgeReconnectFailed')}
+              </div>
+              <button
+                type="button"
+                onClick={() => setModeAndHash('unselected')}
+                className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-bg)] transition-colors"
+              >
+                {t('partnerModeBack')}
+              </button>
+            </div>
+          ) : null}
+
+          {setupRecovery === 'ok' && setupPhase === 'loading' ? (
             <div className="mt-4 space-y-3" aria-busy="true" aria-label={t('connecting')}>
               <Skeleton width="100%" height={16} borderRadius={6} />
               <Skeleton width="85%" height={16} borderRadius={6} />
@@ -224,7 +256,7 @@ export function HomePage() {
             </div>
           ) : null}
 
-          {setupPhase === 'qr' ? (
+          {setupRecovery === 'ok' && setupPhase === 'qr' ? (
             <>
               <p className="mt-2 text-sm text-[var(--app-text-secondary)]">{t('partnerModeQrPhaseIntro')}</p>
               <p className="mt-3 text-sm text-[var(--app-text-secondary)]">{t('partnerModeScanHereOrSelf')}</p>
@@ -252,7 +284,7 @@ export function HomePage() {
             </>
           ) : null}
 
-          {setupPhase === 'form' ? (
+          {setupRecovery === 'ok' && setupPhase === 'form' ? (
             <>
               <p className="mt-2 text-sm text-[var(--app-text-secondary)]">{t('partnerModeDescription')}</p>
 
@@ -335,8 +367,43 @@ export function HomePage() {
       })
     );
     const partnerActiveToyIds = Object.keys(partnerActiveToys);
+    const partnerControlsFrozen =
+      bridge.bridgeSessionRecovery !== 'ok' ||
+      (bridge.partnerEverConnected && !bridge.peerConnected);
+    const showPartnerDroppedBanner =
+      bridge.partnerEverConnected &&
+      !bridge.peerConnected &&
+      bridge.bridgeSessionRecovery === 'ok' &&
+      bridge.socketIoConnected;
     viewNode = (
       <div className="flex flex-col h-full min-h-0 app-min-h-viewport">
+        {bridge.bridgeSessionRecovery === 'reconnecting' ? (
+          <div
+            role="status"
+            className="shrink-0 px-4 py-2.5 bg-amber-500/12 border-b border-amber-500/35 text-sm text-[var(--app-text-primary)] flex items-center gap-2"
+          >
+            <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-500/40 border-t-amber-600" />
+            {t('partnerBridgeReconnecting')}
+          </div>
+        ) : null}
+        {bridge.bridgeSessionRecovery === 'failed' ? (
+          <div
+            role="alert"
+            className="shrink-0 px-4 py-2.5 bg-red-500/12 border-b border-red-500/35 text-sm text-[var(--app-text-primary)] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span>{t('partnerBridgeReconnectFailed')}</span>
+            <button
+              type="button"
+              onClick={() => {
+                bridge.disconnect();
+                setModeAndHash('unselected');
+              }}
+              className="rounded-lg border border-[var(--app-border)] px-3 py-1.5 text-xs font-medium self-start sm:self-auto"
+            >
+              {t('partnerModeExit')}
+            </button>
+          </div>
+        ) : null}
         {bridge.status !== 'error' && (
           <div className="shrink-0 px-4 pt-3 pb-2 bg-[var(--app-bg)] border-b border-[var(--app-border)] flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:gap-y-0">
             <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
@@ -363,7 +430,11 @@ export function HomePage() {
                   {t('partnerModeConnected')}
                   {bridge.rttMs != null ? ` · ${bridge.rttMs} ms` : ''}
                 </span>
-              ) : bridge.status === 'online' ? (
+              ) : showPartnerDroppedBanner ? (
+                <span className="text-xs text-amber-700 dark:text-amber-300">
+                  {t('partnerBridgePartnerDisconnectedWaiting')}
+                </span>
+              ) : bridge.status === 'online' || bridge.status === 'waiting_partner' ? (
                 <span className="text-xs text-[var(--app-text-secondary)]">{t('partnerModeWaitingForPartner')}</span>
               ) : null}
             </div>
@@ -420,6 +491,7 @@ export function HomePage() {
                 ? { label: t('partnerModeExit'), onClick: () => { bridge.disconnect(); setModeAndHash('unselected'); } }
                 : undefined
             }
+            controlsFrozen={partnerControlsFrozen}
           />
         </div>
         {isMobile ? (
@@ -442,7 +514,10 @@ export function HomePage() {
             sendChatTyping={bridge.sendChatTyping}
             sendChatVoice={bridge.sendChatVoice}
             maxLength={CHAT_MAX_LENGTH}
-            connectionOk={bridge.status === 'online' || bridge.status === 'waiting_partner'}
+            connectionOk={
+              bridge.bridgeSessionRecovery === 'ok' &&
+              (bridge.status === 'online' || bridge.status === 'waiting_partner')
+            }
             t={t}
           />
         )}
@@ -455,7 +530,10 @@ export function HomePage() {
           sendChatTyping={bridge.sendChatTyping}
           sendChatVoice={bridge.sendChatVoice}
           maxLength={CHAT_MAX_LENGTH}
-          connectionOk={bridge.status === 'online' || bridge.status === 'waiting_partner'}
+          connectionOk={
+            bridge.bridgeSessionRecovery === 'ok' &&
+            (bridge.status === 'online' || bridge.status === 'waiting_partner')
+          }
           t={t}
         />
         <HomeActionSheet

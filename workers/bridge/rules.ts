@@ -13,9 +13,16 @@ import {
 
 const MAX_ENABLED_TOY_IDS = 50;
 const MAX_LIMITS_KEYS = 30;
+const MAX_FEATURE_LEVEL = 100;
+
+function isStopAction(action: string): boolean {
+  const a = action.trim();
+  return /^stop$/i.test(a) || a.toLowerCase().startsWith('stop:');
+}
 
 function applyMaxPowerToAction(action: string, maxPowerPct: number): string {
   if (maxPowerPct >= 100) return action;
+  if (isStopAction(action)) return action;
   return action
     .split(',')
     .map((part) => {
@@ -26,7 +33,8 @@ function applyMaxPowerToAction(action: string, maxPowerPct: number): string {
       const levelStr = trimmed.slice(colon + 1);
       const level = parseInt(levelStr, 10);
       if (isNaN(level)) return trimmed;
-      const newLevel = Math.round((level * maxPowerPct) / 100);
+      let newLevel = Math.round((level * maxPowerPct) / 100);
+      if (level > 0 && newLevel < 1) newLevel = 1;
       return `${name}:${newLevel}`;
     })
     .join(',');
@@ -34,6 +42,7 @@ function applyMaxPowerToAction(action: string, maxPowerPct: number): string {
 
 function applyPerFeatureLimits(action: string, limits: Record<string, number>): string {
   if (!limits || Object.keys(limits).length === 0) return action;
+  if (isStopAction(action)) return action;
   return action
     .split(',')
     .map((part) => {
@@ -87,6 +96,27 @@ export function applyRulesAndForwardCommand(
   return buildAppMessage(LOVENSE_TOY_COMMAND_EVENT, outPayload);
 }
 
+/** Reject rules payload before mutating state (maxPower 1–100, limits values ≥ 1). */
+export function validateSetToyRulesPayloadFields(payload: {
+  enabledToyIds?: string[];
+  maxPower?: number;
+  limits?: Record<string, number>;
+  targetRole?: 'host' | 'guest';
+}): boolean {
+  if (payload.maxPower != null) {
+    const v =
+      typeof payload.maxPower === 'number' ? payload.maxPower : parseInt(String(payload.maxPower), 10);
+    if (isNaN(v) || v < 1 || v > 100) return false;
+  }
+  if (payload.limits != null) {
+    for (const [, val] of Object.entries(payload.limits)) {
+      const n = typeof val === 'number' ? val : parseInt(String(val), 10);
+      if (isNaN(n) || n < 1 || n > MAX_FEATURE_LEVEL) return false;
+    }
+  }
+  return true;
+}
+
 export function applySetToyRulesPayload(
   payload: {
     enabledToyIds?: string[];
@@ -97,6 +127,7 @@ export function applySetToyRulesPayload(
   fromRole: 'host' | 'guest',
   rules: RoomRules
 ): boolean {
+  if (!validateSetToyRulesPayloadFields(payload)) return false;
   if (payload.targetRole != null && payload.targetRole !== fromRole) {
     return false; // cannot set partner's rules
   }
@@ -109,9 +140,9 @@ export function applySetToyRulesPayload(
     }
   }
   if (payload.maxPower != null) {
-    const v = payload.maxPower;
-    const pct = v >= 0 ? Math.max(0, Math.min(100, v)) : null;
-    if (pct !== null) {
+    const v = typeof payload.maxPower === 'number' ? payload.maxPower : parseInt(String(payload.maxPower), 10);
+    if (!isNaN(v) && v >= 1 && v <= 100) {
+      const pct = Math.round(v);
       if (fromRole === 'host') {
         (rules as MutableRoomRules).hostToyMaxPower = pct;
       } else {
@@ -124,7 +155,7 @@ export function applySetToyRulesPayload(
     const clean: Record<string, number> = {};
     for (const [k, v] of items) {
       const n = typeof v === 'number' ? v : parseInt(String(v), 10);
-      if (!isNaN(n)) clean[k] = n;
+      if (!isNaN(n) && n >= 1 && n <= MAX_FEATURE_LEVEL) clean[k] = n;
     }
     if (fromRole === 'host') {
       (rules as MutableRoomRules).hostLimits = clean;

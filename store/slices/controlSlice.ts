@@ -16,10 +16,14 @@ const controlSlice = createSlice({
   initialState,
   reducers: {
     setLimit(state, action: PayloadAction<{ featureId: string; value: number }>) {
-      state.limits[action.payload.featureId] = action.payload.value;
+      state.limits[action.payload.featureId] = Math.max(1, action.payload.value);
     },
     setLimits(state, action: PayloadAction<Record<string, number>>) {
-      state.limits = action.payload;
+      const next: Record<string, number> = {};
+      for (const [k, v] of Object.entries(action.payload)) {
+        next[k] = Math.max(1, v);
+      }
+      state.limits = next;
     },
     setGroups(state, action: PayloadAction<FeatureGroup[]>) {
       state.groups = action.payload;

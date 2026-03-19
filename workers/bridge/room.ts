@@ -36,6 +36,7 @@ import {
   applyRulesAndForwardCommand,
   applySetToyRulesPayload,
   partnerHasRules,
+  validateSetToyRulesPayloadFields,
 } from './rules';
 
 const ENGINE_OPEN = '0{"sid":"bridge-session","upgrades":[],"pingInterval":25000,"pingTimeout":50000}';
@@ -47,6 +48,7 @@ const PONG = '3';
 const WS_MESSAGE_MAX_BYTES = 256 * 1024;
 const FORWARD_ONLY_EVENTS = new Set([BRIDGE_PING, BRIDGE_PONG, BRIDGE_CHAT_TYPING]);
 const PING_INTERVAL_MS = 20_000;
+const TOY_ENABLE_MIN_INTERVAL_MS = 1000;
 
 export interface Env {
   JWT_SECRET: string;
@@ -83,6 +85,9 @@ export class BridgeRoom extends DurableObject<Env> {
   private chatBuffer: { text: string; ts: number; role: 'host' | 'guest' }[] = [];
   private lastHostChatTs = 0;
   private lastGuestChatTs = 0;
+  /** Last time each toyId was enabled/disabled in rules (per role); anti-flood 1/s per toy. */
+  private hostToyEnableToggleAtMs = new Map<string, number>();
+  private guestToyEnableToggleAtMs = new Map<string, number>();
 
   private cleanupAlarmScheduled = false;
   private readonly ROOM_IDLE_TIMEOUT_MS = 3600 * 1000; // 1 hour
@@ -325,6 +330,7 @@ export class BridgeRoom extends DurableObject<Env> {
       }
     }
     const parsed = parseAppMessage(data);
+    let skipPeerForward = false;
     if (parsed) {
       const [event, payload] = parsed;
       const selfFrontend = fromBackendRole === 'host' ? this.hostFrontend : this.guestFrontend;
@@ -342,12 +348,17 @@ export class BridgeRoom extends DurableObject<Env> {
         else this.guestSessionReady = status === 1;
         this.sendToWebSocket(selfFrontend, buildAppMessage(BRIDGE_SELF_APP_STATUS, payload as Record<string, unknown>));
       } else if (selfFrontend && event === 'basicapi_get_qrcode_tc') {
-        this.sendToWebSocket(selfFrontend, data);
+        // After Lovense app is online, stale QR responses must not hit the UI (flicker).
+        const sessionReady = fromBackendRole === 'host' ? this.hostSessionReady : this.guestSessionReady;
+        if (!sessionReady) {
+          this.sendToWebSocket(selfFrontend, data);
+        }
+        skipPeerForward = true;
       }
     }
 
     const peerFrontend = fromBackendRole === 'host' ? this.guestFrontend : this.hostFrontend;
-    if (peerFrontend) this.sendToWebSocket(peerFrontend, data);
+    if (peerFrontend && !skipPeerForward) this.sendToWebSocket(peerFrontend, data);
   }
 
   private queueToBackend(role: 'host' | 'guest', msg: string): void {
@@ -475,6 +486,34 @@ export class BridgeRoom extends DurableObject<Env> {
     if (msg) ws.send(msg);
   }
 
+  private canApplyEnabledToyChanges(
+    role: 'host' | 'guest',
+    prev: Set<string> | null,
+    next: Set<string>
+  ): boolean {
+    if (!prev) return true;
+    const now = Date.now();
+    const map = role === 'host' ? this.hostToyEnableToggleAtMs : this.guestToyEnableToggleAtMs;
+    const all = new Set<string>([...prev, ...next]);
+    for (const id of all) {
+      if (prev.has(id) === next.has(id)) continue;
+      const last = map.get(id) ?? 0;
+      if (now - last < TOY_ENABLE_MIN_INTERVAL_MS) return false;
+    }
+    return true;
+  }
+
+  private recordEnabledToyToggles(role: 'host' | 'guest', prev: Set<string> | null, next: Set<string>): void {
+    const now = Date.now();
+    const map = role === 'host' ? this.hostToyEnableToggleAtMs : this.guestToyEnableToggleAtMs;
+    const prevS = prev ?? new Set<string>();
+    for (const id of new Set<string>([...prevS, ...next])) {
+      if (prevS.has(id) !== next.has(id)) {
+        map.set(id, now);
+      }
+    }
+  }
+
   private handleFrame(ws: WebSocket, data: string, role: 'host' | 'guest'): void {
     if (data === PROBE_REQUEST) {
       ws.send(PROBE_RESPONSE);
@@ -496,6 +535,14 @@ export class BridgeRoom extends DurableObject<Env> {
 
     if (event === BRIDGE_SET_TOY_RULES) {
       const payload = (payloadRaw as Record<string, unknown>) ?? {};
+      const rulesPayload = {
+        enabledToyIds: payload.enabledToyIds as string[] | undefined,
+        maxPower: payload.maxPower as number | undefined,
+        limits: payload.limits as Record<string, number> | undefined,
+        targetRole: payload.targetRole as 'host' | 'guest' | undefined,
+      };
+      if (!validateSetToyRulesPayloadFields(rulesPayload)) return;
+
       const prevEnabledIds =
         role === 'host'
           ? this.rules.hostEnabledToyIds
@@ -504,18 +551,17 @@ export class BridgeRoom extends DurableObject<Env> {
           : this.rules.guestEnabledToyIds
             ? new Set(this.rules.guestEnabledToyIds)
             : null;
-      const ok = applySetToyRulesPayload(
-        {
-          enabledToyIds: payload.enabledToyIds as string[] | undefined,
-          maxPower: payload.maxPower as number | undefined,
-          limits: payload.limits as Record<string, number> | undefined,
-          targetRole: payload.targetRole as 'host' | 'guest' | undefined,
-        },
-        role,
-        this.rules
-      );
+
+      if (rulesPayload.enabledToyIds != null) {
+        const nextSet = new Set(rulesPayload.enabledToyIds.slice(0, 50));
+        if (!this.canApplyEnabledToyChanges(role, prevEnabledIds, nextSet)) return;
+      }
+
+      const ok = applySetToyRulesPayload(rulesPayload, role, this.rules);
       if (ok) {
-        if (payload.enabledToyIds != null) {
+        if (rulesPayload.enabledToyIds != null) {
+          const nextSet = new Set(rulesPayload.enabledToyIds.slice(0, 50));
+          this.recordEnabledToyToggles(role, prevEnabledIds, nextSet);
           const nextEnabledIds = role === 'host' ? this.rules.hostEnabledToyIds : this.rules.guestEnabledToyIds;
           if (prevEnabledIds && nextEnabledIds) {
             for (const toyId of prevEnabledIds) {

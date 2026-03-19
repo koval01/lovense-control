@@ -110,6 +110,12 @@ export const ukTranslations: TranslationMap = {
   partnerModePartnerNoToys: 'У вашого співбесідника немає підключених іграшок',
   partnerModePartnerNoToysHint: 'Попросіть співбесідника підключити іграшки в додатку Lovense.',
   partnerModeConnected: 'Підключено',
+  partnerBridgeReconnecting: "Зв'язок втрачено. Намагаємося відновити…",
+  partnerBridgePreflightReconnecting: 'Відновлюємо підключення до сервера…',
+  partnerBridgeReconnectFailed:
+    'Не вдалося відновити сесію моста. Вийдіть з кімнати та підключіться знову або поверніться до головного меню.',
+  partnerBridgePartnerDisconnectedWaiting:
+    "Зв'язок із партнером втрачено. Команди вимкнено, доки він не відновить з'єднання.",
   selfModeExitToMenu: 'Вихід у головне меню',
   partnerTheirToysTitle: 'Іграшки партнера',
   partnerToyReadOnly: 'Лише перегляд у режимі партнера',

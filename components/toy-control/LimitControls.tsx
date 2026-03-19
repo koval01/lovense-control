@@ -33,7 +33,7 @@ export function LimitControls({
     const readOnlyLimit =
       partnerLimits && feature.id in partnerLimits ? (partnerLimits[feature.id] ?? feature.maxLevel) : feature.maxLevel;
     const limit = isReadOnly ? readOnlyLimit : (limits[feature.id] ?? feature.maxLevel);
-    const step = Math.max(1, Math.floor(feature.maxLevel / 10));
+    const step = 1;
     const fillPercent = Math.round((limit / Math.max(1, feature.maxLevel)) * 100);
     return (
       <section

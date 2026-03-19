@@ -48,6 +48,8 @@ interface HomeMainViewProps {
   onToggleLocalToy?: (toyId: string) => void;
   /** When status is error, optional secondary button (e.g. Exit partner mode). */
   errorSecondaryAction?: { label: string; onClick: () => void };
+  /** Partner / reconnect: block sliders and commands (visual freeze). */
+  controlsFrozen?: boolean;
   /** Optional left header action (e.g. "Exit to main menu") — рендерится в одной строке с заголовком. */
   headerLeftAction?: { label: string; onClick: () => void };
 }
@@ -77,6 +79,7 @@ export function HomeMainView({
   onToggleToy,
   onToggleLocalToy,
   errorSecondaryAction,
+  controlsFrozen = false,
   headerLeftAction,
 }: HomeMainViewProps) {
   const { status, qrUrl, qrCode, toys, error, sendCommand } = statusData;
@@ -135,6 +138,7 @@ export function HomeMainView({
                     activeToyIds={activeToyIds}
                     editableLimitToys={isPartnerMode ? localToys : undefined}
                     partnerLimits={isPartnerMode ? partnerLimits : undefined}
+                    interactive={!controlsFrozen}
                   />
                 </StatusOnlineView>
               ) : null}

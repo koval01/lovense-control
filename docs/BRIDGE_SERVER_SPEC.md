@@ -178,6 +178,29 @@ npm run bridge:cf:deploy
 
 ---
 
+## 5.1 QR and session-ready
+
+- Lovense → frontend `basicapi_get_qrcode_tc` is **not** forwarded to browser frontends once that side’s app is **online** (`status === 1` from `basicapi_update_app_online_tc` / `basicapi_update_app_status_tc`), so stale QR responses cannot flash after the user completes pairing.
+- QR frames are **not** forwarded to the **peer** frontend (noise / privacy).
+
+## 5.2 Toy rules validation (server-enforced)
+
+- **`bridge_set_toy_rules`:** If `maxPower` is present, it must be an integer **1–100**; otherwise the whole message is rejected (no partial apply).
+- **`limits`:** Every numeric value must be **≥ 1** (and ≤ 100); otherwise the whole message is rejected.
+- **Enable/disable flood:** For each `toyId`, changing whether it appears in `enabledToyIds` is allowed at most **once per second** per toy and per role. If any toy violates this, the **entire** rules update is rejected (no force-stop side effects).
+- **Forwarded commands:** After per-feature caps and global `maxPower` scaling, non-`Stop` actions clamp scaled feature levels so a positive input level never becomes **0** (minimum effective level 1 when the source level was &gt; 0).
+
+## 5.3 Symmetric command gating
+
+- Toy commands are only forwarded when **both** host and guest **browser** WebSockets are connected. If either frontend disconnects, commands are dropped even if a client sends them manually.
+
+## 5.4 Client reconnect (app behaviour)
+
+- JWT tickets remain valid until expiry (default 24 h). The **frontend** should keep the last `hostTicket` / `guestTicket`, and on unexpected bridge WebSocket loss while still “in room” it should retry **`POST /register-session`** with the same ticket and reopen **`/ws?ticket=…`** with exponential backoff, without clearing `roomId` until the user exits.
+- **`401`** on register or WS usually means the ticket expired: user must leave and create/join the room again.
+
+---
+
 ## 6. Reference: Lovense API (server-side)
 
 - **getToken:** Done by the Next.js app; frontend never calls this on the bridge. Frontend gets `authToken` from `POST /api/lovense/socket`.

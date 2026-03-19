@@ -55,7 +55,7 @@ export function FeatureSliderCard({
           type="range"
           min={0}
           max={100}
-          step={5}
+          step={1}
           value={currentPercentage}
           onChange={(e) => onLevelChange(feature.id, Number(e.target.value))}
           className="w-full h-2 rounded-full appearance-none cursor-pointer bg-zinc-700 accent-zinc-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-zinc-400"
@@ -76,7 +76,7 @@ export function FeatureSliderCard({
           type="range"
           min={0}
           max={feature.maxLevel}
-          step={Math.max(1, Math.floor(feature.maxLevel / 10))}
+          step={1}
           value={limit}
           onChange={(e) => onLimitChange(feature.id, Number(e.target.value))}
           className="w-full h-2 rounded-full appearance-none cursor-pointer bg-zinc-700 accent-zinc-400 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-zinc-400"

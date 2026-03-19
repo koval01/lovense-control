@@ -99,15 +99,15 @@ export interface RoomRules {
 
 export function partnerToyRulesMsg(fromRole: 'host' | 'guest', rules: RoomRules): string {
   if (fromRole === 'host') {
-    const enabled = rules.hostEnabledToyIds ? [...rules.hostEnabledToyIds] : [];
     const limits = rules.hostLimits ?? {};
-    const payload: Record<string, unknown> = { enabledToyIds: enabled, limits };
+    const payload: Record<string, unknown> = { limits };
+    if (rules.hostEnabledToyIds != null) payload.enabledToyIds = [...rules.hostEnabledToyIds];
     if (rules.hostToyMaxPower != null) payload.maxPower = rules.hostToyMaxPower;
     return buildAppMessage(BRIDGE_PARTNER_TOY_RULES, payload);
   } else {
-    const enabled = rules.guestEnabledToyIds ? [...rules.guestEnabledToyIds] : [];
     const limits = rules.guestLimits ?? {};
-    const payload: Record<string, unknown> = { enabledToyIds: enabled, limits };
+    const payload: Record<string, unknown> = { limits };
+    if (rules.guestEnabledToyIds != null) payload.enabledToyIds = [...rules.guestEnabledToyIds];
     if (rules.guestToyMaxPower != null) payload.maxPower = rules.guestToyMaxPower;
     return buildAppMessage(BRIDGE_PARTNER_TOY_RULES, payload);
   }

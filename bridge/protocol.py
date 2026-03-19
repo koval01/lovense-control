@@ -13,14 +13,16 @@ if TYPE_CHECKING:
 def partner_toy_rules_msg(from_role: str, room: "Room") -> bytes:
     """Build bridge_partner_toy_rules payload for the other side."""
     if from_role == "host":
-        enabled = list(room.host_enabled_toy_ids) if room.host_enabled_toy_ids is not None else []
         limits = room.host_limits or {}
         max_power = room.host_toy_max_power
+        enabled_ids = room.host_enabled_toy_ids
     else:
-        enabled = list(room.guest_enabled_toy_ids) if room.guest_enabled_toy_ids is not None else []
         limits = room.guest_limits or {}
         max_power = room.guest_toy_max_power
-    payload = {"enabledToyIds": enabled, "limits": limits}
+        enabled_ids = room.guest_enabled_toy_ids
+    payload = {"limits": limits}
+    if enabled_ids is not None:
+        payload["enabledToyIds"] = list(enabled_ids)
     if max_power is not None:
         payload["maxPower"] = max_power
     return build_app_message("bridge_partner_toy_rules", payload)

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
+import { Skeleton } from '@vkontakte/vkui';
 import { useLovense } from '@/hooks/use-lovense';
 import { CHAT_MAX_LENGTH, PAIR_CODE_LENGTH, useBridgeSession } from '@/hooks/use-bridge-session';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -50,11 +51,7 @@ export function HomePage() {
     setThemeMode,
   });
   const mode = useAppSelector((state) => state.connection.mode);
-  const sessionStarted = useAppSelector((state) => state.connection.sessionStarted);
   const isAppReady = isReady && onboarding.isOnboardingReady && onboarding.isOnboardingComplete;
-  const { status, qrUrl, qrCode, toys, error, sendCommand } = useLovense({
-    enabled: isAppReady && (mode === 'self' || mode === 'partner'),
-  });
   const [pairCodeInput, setPairCodeInput] = useState('');
   const isMobile = useIsMobile();
   const [chatModalOpen, setChatModalOpen] = useState(false);
@@ -62,18 +59,22 @@ export function HomePage() {
   const limits = useAppSelector((state) => state.control.limits);
   const bridge = useBridgeSession({
     enabled: isAppReady && mode === 'partner',
-    localToys: toys,
+    localToys: {},
     onIncomingCommand: () => {},
     activeToyIds: mode === 'partner' ? activeToyIds : undefined,
     limits: mode === 'partner' ? limits : undefined,
     notificationTitle: t('partnerChatNewMessage'),
   });
+  const { status, qrUrl, qrCode, toys, error, sendCommand } = useLovense({
+    enabled: isAppReady && mode === 'self',
+  });
   const isBridgeAvailable = bridge.isBridgeAvailable;
   const toast = useToast();
   const controllableToys = mode === 'partner' ? bridge.remoteToys : toys;
   useEffect(() => {
+    if (mode !== 'self') return;
     dispatch(syncActiveToyIds(Object.keys(controllableToys)));
-  }, [controllableToys, dispatch]);
+  }, [controllableToys, dispatch, mode]);
 
   const handleToggleToy = useCallback(
     (toyId: string) => {
@@ -199,86 +200,47 @@ export function HomePage() {
     );
   } else if (mode === 'partner' && !bridge.roomId) {
     viewKey = 'partner-setup';
+    const setupPhase = bridge.partnerSetupPhase;
     viewNode = (
       <div id="main-content" className="h-full min-h-screen bg-[var(--app-bg)] flex items-center justify-center p-5">
         <div className="w-full max-w-xl rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg-elevated)] p-5 md:p-6">
           <h1 className="text-xl md:text-2xl font-semibold text-[var(--app-text)]">
             {t('partnerModeTitle')}
           </h1>
-          <p className="mt-2 text-sm text-[var(--app-text-secondary)]">
-            {t('partnerModeDescription')}
-          </p>
 
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-[var(--app-text)] mb-1">
-              {t('partnerModeJoinLabel')}
-            </label>
-            <input
-              value={pairCodeInput}
-              onChange={(event) => {
-                const alphanumeric = event.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, PAIR_CODE_LENGTH);
-                setPairCodeInput(alphanumeric);
-              }}
-              inputMode="text"
-              autoComplete="one-time-code"
-              className="w-full h-11 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-base tracking-[0.2em] text-[var(--app-text)] font-mono"
-              placeholder={t('partnerModeJoinPlaceholder')}
-            />
-            {!sessionStarted && (
-              <p className="mt-2 text-xs text-[var(--app-text-secondary)]">
-                {t('partnerModeJoinRequireConnection')}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                if (sessionStarted) void bridge.joinRoom(pairCodeInput.trim());
-              }}
-              disabled={pairCodeInput.trim().length !== PAIR_CODE_LENGTH || !sessionStarted}
-              className="mt-3 w-full rounded-xl bg-[var(--app-accent)] text-white px-4 py-2.5 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-[var(--app-surface-soft)] disabled:text-[var(--app-text-secondary)] disabled:border disabled:border-[var(--app-border)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
-            >
-              {t('partnerModeJoinButton')}
-            </button>
-          </div>
+          {setupPhase === 'loading' ? (
+            <div className="mt-4 space-y-3" aria-busy="true" aria-label={t('connecting')}>
+              <Skeleton width="100%" height={16} borderRadius={6} />
+              <Skeleton width="85%" height={16} borderRadius={6} />
+              <Skeleton width="70%" height={16} borderRadius={6} />
+              <div className="pt-6 space-y-3">
+                <Skeleton width="100%" height={44} borderRadius={12} />
+                <Skeleton width="100%" height={44} borderRadius={12} />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <Skeleton width={140} height={40} borderRadius={12} />
+                <Skeleton width={100} height={40} borderRadius={12} />
+              </div>
+            </div>
+          ) : null}
 
-          <div className="mt-6 pt-4 border-t border-[var(--app-border)]">
-            <p className="text-xs text-[var(--app-text-secondary)] mb-3">
-              {t('partnerModeCreateCodeHint')}
-            </p>
-            {!sessionStarted ? (
-              <>
-                <p className="text-sm text-[var(--app-text-secondary)] mb-3">
-                  {t('partnerModeScanHereOrSelf')}
-                </p>
-                {status === 'qr_ready' ? (
-                  <div className="my-6">
-                    <StatusQrView qrUrl={qrUrl} qrCode={qrCode} compact />
-                  </div>
-                ) : status === 'error' && error ? (
-                  <p className="text-sm text-red-500 dark:text-red-400 py-2">{error}</p>
-                ) : (
-                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-[var(--app-text-secondary)]">
-                    <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--app-border)] border-t-[var(--app-accent)]" />
-                    {t('partnerModeConnectingToys')}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setModeAndHash('self')}
-                  className="mt-4 text-sm text-[var(--app-text-secondary)] hover:text-[var(--app-text)] underline underline-offset-2 decoration-[var(--app-border)] hover:decoration-[var(--app-text)] transition-colors"
-                >
-                  {t('partnerModeGoToSelfToConnect')}
-                </button>
-              </>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => void bridge.createRoom()}
-                  className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-bg)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  {t('partnerModeCreateCode')}
-                </button>
+          {setupPhase === 'qr' ? (
+            <>
+              <p className="mt-2 text-sm text-[var(--app-text-secondary)]">{t('partnerModeQrPhaseIntro')}</p>
+              <p className="mt-3 text-sm text-[var(--app-text-secondary)]">{t('partnerModeScanHereOrSelf')}</p>
+              {bridge.selfQrUrl || bridge.selfQrCode ? (
+                <div className="my-6">
+                  <StatusQrView qrUrl={bridge.selfQrUrl} qrCode={bridge.selfQrCode} compact />
+                </div>
+              ) : bridge.error ? (
+                <p className="mt-4 text-sm text-red-500 dark:text-red-400">{bridge.error}</p>
+              ) : (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--app-text-secondary)]">
+                  <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--app-border)] border-t-[var(--app-accent)]" />
+                  {t('partnerModeConnectingToys')}
+                </div>
+              )}
+              <div className="mt-2">
                 <button
                   type="button"
                   onClick={() => setModeAndHash('unselected')}
@@ -287,10 +249,67 @@ export function HomePage() {
                   {t('partnerModeBack')}
                 </button>
               </div>
-            )}
-          </div>
+            </>
+          ) : null}
 
-          {bridge.error ? <p className="mt-4 text-sm text-red-500">{bridge.error}</p> : null}
+          {setupPhase === 'form' ? (
+            <>
+              <p className="mt-2 text-sm text-[var(--app-text-secondary)]">{t('partnerModeDescription')}</p>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-[var(--app-text)] mb-1">
+                  {t('partnerModeJoinLabel')}
+                </label>
+                <input
+                  value={pairCodeInput}
+                  onChange={(event) => {
+                    const alphanumeric = event.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, PAIR_CODE_LENGTH);
+                    setPairCodeInput(alphanumeric);
+                  }}
+                  inputMode="text"
+                  autoComplete="one-time-code"
+                  className="w-full h-11 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-base tracking-[0.2em] text-[var(--app-text)] font-mono"
+                  placeholder={t('partnerModeJoinPlaceholder')}
+                />
+                <button
+                  type="button"
+                  onClick={() => void bridge.joinRoom(pairCodeInput.trim())}
+                  disabled={pairCodeInput.trim().length !== PAIR_CODE_LENGTH || !bridge.selfSessionReady}
+                  className="mt-3 w-full rounded-xl bg-[var(--app-accent)] text-white px-4 py-2.5 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-[var(--app-surface-soft)] disabled:text-[var(--app-text-secondary)] disabled:border disabled:border-[var(--app-border)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  {t('partnerModeJoinButton')}
+                </button>
+                {!bridge.selfSessionReady && (
+                  <p className="mt-2 text-xs text-[var(--app-text-secondary)]">
+                    {t('partnerModeJoinRequireConnection')}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-[var(--app-border)]">
+                <p className="text-xs text-[var(--app-text-secondary)] mb-3">{t('partnerModeCreateCodeHint')}</p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void bridge.createRoom()}
+                    disabled={!bridge.selfSessionReady}
+                    className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-bg)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    {t('partnerModeCreateCode')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModeAndHash('unselected')}
+                    className="rounded-xl border border-[var(--app-border)] px-4 py-2 text-sm font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-bg)] transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    {t('partnerModeBack')}
+                  </button>
+                </div>
+              </div>
+
+              {bridge.error ? <p className="mt-4 text-sm text-red-500">{bridge.error}</p> : null}
+            </>
+          ) : null}
         </div>
       </div>
     );
@@ -305,15 +324,17 @@ export function HomePage() {
     const partnerError = bridge.error;
     const partnerQr = null;
     const partnerToys = bridge.remoteToys;
+    const myToys = bridge.localToysFromBridge;
     const partnerEnabledSet =
       bridge.partnerEnabledToyIds !== undefined ? new Set(bridge.partnerEnabledToyIds) : null;
     const partnerActiveToys = Object.fromEntries(
       Object.entries(partnerToys).filter(([toyId]) => {
-        if (!activeToyIds.includes(toyId)) return false;
+        if (!bridge.peerConnected) return false;
         if (partnerEnabledSet !== null && !partnerEnabledSet.has(toyId)) return false;
         return true;
       })
     );
+    const partnerActiveToyIds = Object.keys(partnerActiveToys);
     viewNode = (
       <div className="flex flex-col h-full min-h-0 app-min-h-viewport">
         {bridge.status !== 'error' && (
@@ -368,8 +389,10 @@ export function HomePage() {
               error: partnerError,
               sendCommand: bridge.sendLovenseCommand,
             }}
-            activeToyIds={activeToyIds}
+            activeToyIds={partnerActiveToyIds}
             activeToys={partnerActiveToys}
+            localToys={myToys}
+            localEnabledToyIds={bridge.localEnabledToyIds}
             partnerEnabledToyIds={bridge.partnerEnabledToyIds}
             partnerLimits={bridge.partnerLimits}
             isPartnerMode
@@ -390,7 +413,8 @@ export function HomePage() {
             languageButtonRef={languageButtonRef}
             onOpenTheme={() => setActiveSheet('theme')}
             onOpenLanguage={() => setActiveSheet('language')}
-            onToggleToy={handleToggleToy}
+            onToggleToy={() => {}}
+            onToggleLocalToy={bridge.toggleLocalToyEnabled}
             errorSecondaryAction={
               mode === 'partner'
                 ? { label: t('partnerModeExit'), onClick: () => { bridge.disconnect(); setModeAndHash('unselected'); } }

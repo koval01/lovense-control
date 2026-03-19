@@ -3,6 +3,8 @@
 import { AnimatePresence, motion } from 'motion/react';
 import type { Toy } from '@/lib/lovense-domain';
 import { ToyCard } from '@/components/status/ToyCard';
+import { useI18n } from '@/contexts/i18n-context';
+import type { TranslationKey } from '@/lib/i18n';
 
 interface OnlineToyGridProps {
   toys: Record<string, Toy>;
@@ -11,21 +13,38 @@ interface OnlineToyGridProps {
   onToggleToy: (toyId: string) => void;
   /** Partner mode: IDs the partner enabled; toys not in list show as disabled by owner. */
   partnerEnabledToyIds?: string[];
+  readOnly?: boolean;
+  sectionTitleKey?: TranslationKey;
 }
 
-export function OnlineToyGrid({ toys, activeToyIds, isMobile, onToggleToy, partnerEnabledToyIds }: OnlineToyGridProps) {
+export function OnlineToyGrid({
+  toys,
+  activeToyIds,
+  isMobile,
+  onToggleToy,
+  partnerEnabledToyIds,
+  readOnly = false,
+  sectionTitleKey,
+}: OnlineToyGridProps) {
+  const { t } = useI18n();
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: isMobile ? 8 : 12,
-        marginBottom: isMobile ? 6 : 20,
-        paddingLeft: isMobile ? 12 : 16,
-        paddingRight: isMobile ? 12 : 16,
-      }}
-      className="shrink-0 md:px-0 md:mb-8 md:gap-4"
-    >
+    <div>
+      {sectionTitleKey ? (
+        <div className="px-3 md:px-0 mb-2 text-xs md:text-sm font-medium text-[var(--app-text-secondary)]">
+          {t(sectionTitleKey)}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: isMobile ? 8 : 12,
+          marginBottom: isMobile ? 6 : 20,
+          paddingLeft: isMobile ? 12 : 16,
+          paddingRight: isMobile ? 12 : 16,
+        }}
+        className="shrink-0 md:px-0 md:mb-8 md:gap-4"
+      >
       <AnimatePresence initial={false}>
         {Object.values(toys).map((toy) => {
           const disabledByPartner =
@@ -44,11 +63,13 @@ export function OnlineToyGrid({ toys, activeToyIds, isMobile, onToggleToy, partn
                 isActive={activeToyIds.includes(toy.id)}
                 onToggle={onToggleToy}
                 disabledByPartner={disabledByPartner}
+                readOnly={readOnly}
               />
             </motion.div>
           );
         })}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -82,6 +82,8 @@ export const enTranslations: TranslationMap = {
   partnerModeTitle: 'Partner bridge mode',
   partnerModeDescription:
     'In this mode, your partner controls your toys through a server-validated tunnel, and you control theirs.',
+  partnerModeQrPhaseIntro:
+    'Scan the QR code with the Lovense app to authorize this session. When the app is connected, you can join or create a room.',
   partnerModeCreateCode: 'Create invite code',
   partnerModeCreateCodeHint: 'If you want to invite a partner, create a code and share it.',
   partnerModeRequireSelfConnection:
@@ -106,6 +108,8 @@ export const enTranslations: TranslationMap = {
   partnerModePartnerNoToysHint: 'Ask your partner to connect their toys in the Lovense app.',
   partnerModeConnected: 'Connected',
   selfModeExitToMenu: 'Exit to main menu',
+  partnerTheirToysTitle: "Partner's toys",
+  partnerToyReadOnly: 'Read-only in partner mode',
   partnerModeToyDisabledByOwner: 'Disabled by partner',
   partnerLimitLabel: "Partner's limit",
   partnerChatPlaceholder: 'Message...',

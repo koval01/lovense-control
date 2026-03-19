@@ -67,9 +67,9 @@ Then set `NEXT_PUBLIC_BRIDGE_SERVER_URL=http://localhost:8787` when running the 
 
 ## API
 
-Same contract as the Python bridge ([docs/BRIDGE_SERVER_SPEC.md](../../docs/BRIDGE_SERVER_SPEC.md)):
+Server contract ([docs/BRIDGE_SERVER_SPEC.md](../../docs/BRIDGE_SERVER_SPEC.md)):
 
 - `POST /rooms` — create room (host)
 - `POST /rooms/join` — join room (guest)
-- `POST /getSocketUrl` — register Lovense session
+- `POST /register-session` — register Lovense session
 - `GET /ws?ticket=...` — WebSocket (Engine.IO / Socket.IO)

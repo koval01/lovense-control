@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Box } from '@vkontakte/vkui';
 import { SlidersHorizontal, Waves } from 'lucide-react';
-import type { Toy, ToyFeature, FeatureGroup } from '@/lib/lovense-domain';
+import { buildToyFeatures, type Toy, type ToyFeature, type FeatureGroup } from '@/lib/lovense-domain';
 import { useToyFeatures } from '@/hooks/use-toy-features';
 import { useFeatureGroups } from '@/hooks/use-feature-groups';
 import { useBubbleLayout } from '@/hooks/use-bubble-layout';
@@ -27,6 +27,8 @@ export interface ToyControlContainerProps {
   toys: Record<string, Toy>;
   onCommand: (toyId: string, action: string, timeSec?: number) => void;
   activeToyIds?: string[];
+  /** Partner mode: own toys for editable limits section. */
+  editableLimitToys?: Record<string, Toy>;
   /** Partner mode: partner's limits (read-only in Max Level panel). */
   partnerLimits?: Record<string, number>;
   interactive?: boolean;
@@ -40,6 +42,7 @@ export function ToyControlContainer({
   toys,
   onCommand,
   activeToyIds,
+  editableLimitToys,
   partnerLimits,
   interactive = true,
   demoAutoplay = false,
@@ -57,6 +60,10 @@ export function ToyControlContainer({
   const bubbleSize = isMobile ? 56 : 64;
   const bubbleBottomInset = isMobile ? 20 : 8;
   const bubbleHorizontalInset = isMobile ? 10 : 18;
+  const allToysForLimits = useMemo(
+    () => (editableLimitToys ? { ...editableLimitToys, ...toys } : toys),
+    [editableLimitToys, toys]
+  );
 
   const {
     features,
@@ -68,7 +75,15 @@ export function ToyControlContainer({
     flushPendingCommand,
     applyLevelsAndSend,
     stopAllFeatures,
-  } = useToyFeatures(toys, { onCommand, activeToyIds });
+  } = useToyFeatures(toys, { onCommand, activeToyIds, allToysForLimits });
+  const editableLimitFeatures = useMemo(
+    () => (editableLimitToys ? buildToyFeatures(editableLimitToys) : features),
+    [editableLimitToys, features]
+  );
+  const readOnlyLimitFeatures = useMemo(
+    () => (editableLimitToys ? features : []),
+    [editableLimitToys, features]
+  );
 
   const { groups, setGroups, isFeatureInGroup, mergeFeatures, resetGroups } = useFeatureGroups(features);
   const featureLayoutKey = useMemo(
@@ -470,6 +485,8 @@ export function ToyControlContainer({
                   features={features}
                   limits={limits}
                   onLimitChange={setLimit}
+                  editableFeatures={editableLimitFeatures}
+                  readOnlyFeatures={readOnlyLimitFeatures}
                   partnerLimits={partnerLimits}
                 />
               </div>

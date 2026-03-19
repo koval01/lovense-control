@@ -84,6 +84,8 @@ export const ukTranslations: TranslationMap = {
   partnerModeTitle: 'Режим моста з партнером',
   partnerModeDescription:
     'У цьому режимi партнер керує вашими iграшками через тунель, який перевiряється сервером, а ви — його.',
+  partnerModeQrPhaseIntro:
+    'Відскануйте QR-код у застосунку Lovense, щоб авторизувати сесію. Після підключення застосунку можна увійти в кімнату або створити її.',
   partnerModeCreateCode: 'Створити код запрошення',
   partnerModeCreateCodeHint: 'Якщо ви хочете запросити партнера — створіть код і поділіться ним.',
   partnerModeRequireSelfConnection:
@@ -109,6 +111,8 @@ export const ukTranslations: TranslationMap = {
   partnerModePartnerNoToysHint: 'Попросіть співбесідника підключити іграшки в додатку Lovense.',
   partnerModeConnected: 'Підключено',
   selfModeExitToMenu: 'Вихід у головне меню',
+  partnerTheirToysTitle: 'Іграшки партнера',
+  partnerToyReadOnly: 'Лише перегляд у режимі партнера',
   partnerModeToyDisabledByOwner: 'Вимкнено партнером',
   partnerLimitLabel: 'Ліміт партнера',
   partnerChatPlaceholder: 'Повідомлення...',

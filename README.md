@@ -11,7 +11,7 @@ npm run dev
 
 Open the app, scan the QR code with the Lovense Connect app on your phone, and connect your toys.
 
-**Partner mode:** Set `NEXT_PUBLIC_BRIDGE_SERVER_URL` to your bridge server (e.g. `https://bridge.example.com`). Run the bridge with `python -m bridge` (see `bridge/` and `.env` for `JWT_SECRET`, `CORS_ORIGINS`, etc.).
+**Partner mode:** Set `NEXT_PUBLIC_BRIDGE_SERVER_URL` to your bridge server (e.g. `https://bridge.example.com`). Run the Cloudflare bridge worker (`npm run bridge:cf:dev` / `npm run bridge:cf:deploy`) and configure `JWT_SECRET`, `CORS_ORIGINS`, etc.
 
 ## How It's Structured
 

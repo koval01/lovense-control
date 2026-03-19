@@ -22,6 +22,9 @@ interface HomeMainViewProps {
   statusData: HomeStatusData;
   activeToyIds: string[];
   activeToys: Record<string, Toy>;
+  /** Partner mode: local toys and allow-list for partner control. */
+  localToys?: Record<string, Toy>;
+  localEnabledToyIds?: string[];
   isHeaderVisible: boolean;
   /** Partner mode: toys enabled by partner for us; show disabled state for the rest. */
   partnerEnabledToyIds?: string[];
@@ -42,6 +45,7 @@ interface HomeMainViewProps {
   onOpenTheme: () => void;
   onOpenLanguage: () => void;
   onToggleToy: (toyId: string) => void;
+  onToggleLocalToy?: (toyId: string) => void;
   /** When status is error, optional secondary button (e.g. Exit partner mode). */
   errorSecondaryAction?: { label: string; onClick: () => void };
   /** Optional left header action (e.g. "Exit to main menu") — рендерится в одной строке с заголовком. */
@@ -56,6 +60,8 @@ export function HomeMainView({
   statusData,
   activeToyIds,
   activeToys,
+  localToys,
+  localEnabledToyIds,
   isHeaderVisible,
   partnerEnabledToyIds,
   partnerLimits,
@@ -69,6 +75,7 @@ export function HomeMainView({
   onOpenTheme,
   onOpenLanguage,
   onToggleToy,
+  onToggleLocalToy,
   errorSecondaryAction,
   headerLeftAction,
 }: HomeMainViewProps) {
@@ -115,6 +122,9 @@ export function HomeMainView({
                   toys={toys}
                   activeToyIds={activeToyIds}
                   onToggleToy={onToggleToy}
+                  localToys={isPartnerMode ? localToys : undefined}
+                  localEnabledToyIds={isPartnerMode ? localEnabledToyIds : undefined}
+                  onToggleLocalToy={isPartnerMode ? onToggleLocalToy : undefined}
                   partnerEnabledToyIds={isPartnerMode ? partnerEnabledToyIds : undefined}
                   emptyStateTitleKey={emptyStateTitleKey}
                   emptyStateHintKey={emptyStateHintKey}
@@ -123,6 +133,7 @@ export function HomeMainView({
                     toys={activeToys}
                     onCommand={sendCommand}
                     activeToyIds={activeToyIds}
+                    editableLimitToys={isPartnerMode ? localToys : undefined}
                     partnerLimits={isPartnerMode ? partnerLimits : undefined}
                   />
                 </StatusOnlineView>

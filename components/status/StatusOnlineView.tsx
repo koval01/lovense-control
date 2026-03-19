@@ -14,6 +14,9 @@ export interface StatusOnlineViewProps {
   toys: Record<string, Toy>;
   activeToyIds: string[];
   onToggleToy: (toyId: string) => void;
+  localToys?: Record<string, Toy>;
+  localEnabledToyIds?: string[];
+  onToggleLocalToy?: (toyId: string) => void;
   children: React.ReactNode;
   /** Partner mode: toy IDs the partner enabled for us; others show as disabled. */
   partnerEnabledToyIds?: string[];
@@ -26,14 +29,19 @@ export function StatusOnlineView({
   toys,
   activeToyIds,
   onToggleToy,
+  localToys,
+  localEnabledToyIds,
+  onToggleLocalToy,
   children,
   partnerEnabledToyIds,
   emptyStateTitleKey,
   emptyStateHintKey,
 }: StatusOnlineViewProps) {
   const toyIds = Object.keys(toys);
+  const localToyIds = Object.keys(localToys ?? {});
   const activeCount = toyIds.filter((toyId) => activeToyIds.includes(toyId)).length;
   const isMobile = useIsMobile();
+  const isPartnerSplit = localToys !== undefined && localEnabledToyIds !== undefined && onToggleLocalToy !== undefined;
 
   return (
     <motion.div
@@ -44,7 +52,7 @@ export function StatusOnlineView({
       exit="exit"
       className="w-full max-w-5xl mx-auto px-0 md:px-6 pt-2 md:pt-4 h-full min-h-0 flex flex-col overflow-hidden"
     >
-      {toyIds.length === 0 ? (
+      {toyIds.length === 0 && !isPartnerSplit ? (
         <EmptyState
           className="flex-1"
           {...(emptyStateTitleKey && emptyStateHintKey
@@ -53,13 +61,34 @@ export function StatusOnlineView({
         />
       ) : (
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden md:overflow-visible">
-          <OnlineToyGrid
-            toys={toys}
-            activeToyIds={activeToyIds}
-            isMobile={isMobile}
-            onToggleToy={onToggleToy}
-            partnerEnabledToyIds={partnerEnabledToyIds}
-          />
+          {isPartnerSplit ? (
+            <>
+              <OnlineToyGrid
+                toys={localToys}
+                activeToyIds={localEnabledToyIds}
+                isMobile={isMobile}
+                onToggleToy={onToggleLocalToy}
+                sectionTitleKey="myToys"
+              />
+              <OnlineToyGrid
+                toys={toys}
+                activeToyIds={partnerEnabledToyIds ?? []}
+                isMobile={isMobile}
+                onToggleToy={() => {}}
+                partnerEnabledToyIds={partnerEnabledToyIds}
+                readOnly
+                sectionTitleKey="partnerTheirToysTitle"
+              />
+            </>
+          ) : (
+            <OnlineToyGrid
+              toys={toys}
+              activeToyIds={activeToyIds}
+              isMobile={isMobile}
+              onToggleToy={onToggleToy}
+              partnerEnabledToyIds={partnerEnabledToyIds}
+            />
+          )}
           <OnlineControlsPanel activeCount={activeCount}>{children}</OnlineControlsPanel>
         </div>
       )}

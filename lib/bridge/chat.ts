@@ -1,6 +1,6 @@
 /**
  * Bridge chat: max length and client-side validation.
- * Must match bridge server (bridge/chat.py).
+ * Must match bridge server-side validation.
  */
 
 export const CHAT_MAX_LENGTH = 1000;

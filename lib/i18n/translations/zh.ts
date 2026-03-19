@@ -78,6 +78,7 @@ export const zhTranslations: TranslationMap = {
   controlModePartnerUnavailableSuffix: '（当前不可用）',
   partnerModeTitle: '伙伴桥接模式',
   partnerModeDescription: '在此模式下，伙伴可以通过受服务器验证的隧道控制你的玩具，而你也可以控制 TA 的玩具。',
+  partnerModeQrPhaseIntro: '使用 Lovense 应用扫描此二维码以授权会话。应用连接后即可加入或创建房间。',
   partnerModeCreateCode: '创建邀请码',
   partnerModeCreateCodeHint: '如果想邀请伙伴，请创建一个一次性邀请码并分享给对方。',
   partnerModeRequireSelfConnection:
@@ -102,6 +103,8 @@ export const zhTranslations: TranslationMap = {
   partnerModePartnerNoToysHint: '请对方在 Lovense 应用中连接玩具。',
   partnerModeConnected: '已连接',
   selfModeExitToMenu: '返回主菜单',
+  partnerTheirToysTitle: '伙伴的玩具',
+  partnerToyReadOnly: '伙伴模式下仅可查看',
   partnerModeToyDisabledByOwner: '由伙伴禁用',
   partnerLimitLabel: '伙伴上限',
   partnerChatPlaceholder: '消息...',

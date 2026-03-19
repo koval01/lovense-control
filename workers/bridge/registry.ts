@@ -108,6 +108,26 @@ export class BridgeRegistry extends DurableObject<Env> {
       return Response.json({ detail: 'Room not found' }, { status: 404 });
     }
 
+    // Server-side guard: do not allow opening a real guest session until
+    // host session is confirmed online on Lovense side (QR completed).
+    try {
+      const roomDoId = this.env.BRIDGE_ROOM.idFromName(roomId);
+      const roomStub = this.env.BRIDGE_ROOM.get(roomDoId);
+      const readyRes = await roomStub.fetch('https://internal/internal/ready');
+      if (!readyRes.ok) {
+        return Response.json({ detail: 'Room not ready yet' }, { status: 409 });
+      }
+      const ready = (await readyRes.json()) as { hostReady?: boolean };
+      if (!ready.hostReady) {
+        return Response.json(
+          { detail: 'Host session is not verified yet. Complete QR setup first.' },
+          { status: 409 }
+        );
+      }
+    } catch {
+      return Response.json({ detail: 'Room not ready yet' }, { status: 409 });
+    }
+
     const secret = this.env.JWT_SECRET;
     if (!secret) {
       return Response.json({ error: 'JWT_SECRET not configured' }, { status: 500 });

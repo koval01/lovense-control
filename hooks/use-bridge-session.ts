@@ -6,6 +6,7 @@ import type { BridgeToyCapability } from '@/lib/bridge/protocol';
 import { LovenseWsClient } from '@/lib/lovense/ws-client';
 import { internalApiClient } from '@/lib/api/internal-client';
 import { FEATURE_MAX_LEVELS } from '@/lib/lovense/constants';
+import { buildToyFeatures } from '@/lib/lovense-domain';
 import { CHAT_MAX_LENGTH, validateChatText as validateChatTextClient } from '@/lib/bridge/chat';
 import { PAIR_CODE_LENGTH } from '@/lib/bridge/constants';
 import {
@@ -16,6 +17,9 @@ import {
 } from '@/lib/notification-utils';
 
 type BridgeStatus = 'idle' | 'connecting' | 'waiting_partner' | 'online' | 'error';
+
+/** Partner menu before joining a room: wait for bridge → QR / auth → join & create UI. */
+export type PartnerSetupPhase = 'loading' | 'qr' | 'form';
 
 export type BridgeChatMessage =
   | {
@@ -145,12 +149,12 @@ const RAW_BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_SERVER_URL ?? '';
 const { httpBase: BRIDGE_HTTP_BASE, wsBase: BRIDGE_WS_BASE } = buildHttpAndWsUrls(RAW_BRIDGE_URL);
 const BRIDGE_AVAILABLE = Boolean(BRIDGE_HTTP_BASE && BRIDGE_WS_BASE);
 
-/** Proxy path on the bridge: client sends authToken so the server can call Lovense getSocketUrl and open the tunnel. */
-const BRIDGE_GET_SOCKET_URL_PATH = '/getSocketUrl';
+/** Register path on the bridge: worker binds ticket to a Lovense backend tunnel. */
+const BRIDGE_REGISTER_SESSION_PATH = '/register-session';
 
 /**
  * Register this client's Lovense session with the bridge so it can connect to Lovense and tunnel.
- * Call before connecting the WebSocket. Fetches authToken from our app, then POSTs to bridge /getSocketUrl.
+ * Call before connecting the WebSocket. Fetches authToken from our app, then POSTs to bridge /register-session.
  * Ensures a session cookie exists (GET /api/session) so partner mode works without opening self mode first.
  */
 async function registerLovenseWithBridge(ticket: string): Promise<void> {
@@ -167,7 +171,7 @@ async function registerLovenseWithBridge(ticket: string): Promise<void> {
     ticket,
   };
   if (socketAuth.sessionProof) body.sessionProof = socketAuth.sessionProof;
-  const res = await fetch(`${BRIDGE_HTTP_BASE}${BRIDGE_GET_SOCKET_URL_PATH}`, {
+  const res = await fetch(`${BRIDGE_HTTP_BASE}${BRIDGE_REGISTER_SESSION_PATH}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -210,8 +214,15 @@ export function useBridgeSession(options: {
   const [isHost, setIsHost] = useState(false);
   const [peerConnected, setPeerConnected] = useState(false);
   const [remoteCapabilities, setRemoteCapabilities] = useState<BridgeToyCapability[]>([]);
+  const [localCapabilities, setLocalCapabilities] = useState<BridgeToyCapability[]>([]);
+  const [hasSelfDeviceInfo, setHasSelfDeviceInfo] = useState(false);
+  const [localEnabledToyIds, setLocalEnabledToyIds] = useState<string[]>([]);
   const [partnerEnabledToyIds, setPartnerEnabledToyIds] = useState<string[] | undefined>(undefined);
   const [partnerLimits, setPartnerLimits] = useState<Record<string, number>>({});
+  const [selfQrUrl, setSelfQrUrl] = useState<string | null>(null);
+  const [selfQrCode, setSelfQrCode] = useState<string | null>(null);
+  const [selfSessionReady, setSelfSessionReady] = useState(false);
+  const [preparingSession, setPreparingSession] = useState(false);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [socketIoConnected, setSocketIoConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState<BridgeChatMessage[]>([]);
@@ -220,10 +231,29 @@ export function useBridgeSession(options: {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleRef = useRef<'host' | 'guest'>('host');
   const audioObjectUrlsRef = useRef<string[]>([]);
+  const preflightRoomIdRef = useRef<string | null>(null);
+  const preflightPairCodeRef = useRef<string | null>(null);
+  const preflightHostTicketRef = useRef<string | null>(null);
+  /** Synchronous guard so a late QR payload cannot flash after session becomes ready. */
+  const selfSessionReadyRef = useRef(false);
 
   const lovenseClientRef = useRef<LovenseWsClient | null>(null);
 
   const remoteToys = useMemo(() => mapRemoteCapabilitiesToToyMap(remoteCapabilities), [remoteCapabilities]);
+  const localToysFromBridge = useMemo(() => mapRemoteCapabilitiesToToyMap(localCapabilities), [localCapabilities]);
+  const localFeatureIdSet = useMemo(
+    () => new Set(buildToyFeatures(localToysFromBridge).map((f) => f.id)),
+    [localToysFromBridge]
+  );
+
+  const partnerSetupPhase = useMemo((): PartnerSetupPhase => {
+    if (roomId !== null) return 'form';
+    if (error && !socketIoConnected && !preparingSession) return 'form';
+    if (preparingSession) return 'loading';
+    if (!socketIoConnected) return 'loading';
+    if (selfSessionReady) return 'form';
+    return 'qr';
+  }, [roomId, error, preparingSession, socketIoConnected, selfSessionReady]);
 
   const resetState = useCallback(() => {
     setStatus('idle');
@@ -234,8 +264,16 @@ export function useBridgeSession(options: {
     setPeerConnected(false);
     setSocketIoConnected(false);
     setRemoteCapabilities([]);
+    setLocalCapabilities([]);
+    setHasSelfDeviceInfo(false);
+    setLocalEnabledToyIds([]);
     setPartnerEnabledToyIds(undefined);
     setPartnerLimits({});
+    setSelfQrUrl(null);
+    setSelfQrCode(null);
+    selfSessionReadyRef.current = false;
+    setSelfSessionReady(false);
+    setPreparingSession(false);
     setRttMs(null);
     setChatMessages([]);
     setPartnerTyping(false);
@@ -251,6 +289,9 @@ export function useBridgeSession(options: {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
+    preflightRoomIdRef.current = null;
+    preflightPairCodeRef.current = null;
+    preflightHostTicketRef.current = null;
   }, []);
 
   const closeSocket = useCallback(() => {
@@ -306,14 +347,14 @@ export function useBridgeSession(options: {
           setError('Error while communicating with tunnel.');
         },
         onSocketIoConnected: () => {
-          setStatus('online');
+          setStatus((prev) => (prev === 'idle' ? 'idle' : 'online'));
           setSocketIoConnected(true);
         },
         onSocketIoEvent: (event, payloadData) => {
           const payload = payloadData as {
             status?: number;
             toyList?: RawToy[];
-            data?: { qrcodeUrl?: string };
+            data?: { qrcodeUrl?: string; qrcode?: string };
             connected?: boolean;
             enabledToyIds?: string[];
             maxPower?: number;
@@ -338,6 +379,41 @@ export function useBridgeSession(options: {
           ) {
             const toyList = payload?.toyList ?? [];
             setRemoteCapabilities(lovenseToyListToCapabilities(toyList));
+          }
+          if (event === 'bridge_self_device_info') {
+            const toyList = payload?.toyList ?? [];
+            setHasSelfDeviceInfo(true);
+            const ownCaps = lovenseToyListToCapabilities(toyList);
+            setLocalCapabilities(ownCaps);
+            const ownIds = ownCaps.map((t) => t.id);
+            setLocalEnabledToyIds((prev) => {
+              const prevSet = new Set(prev);
+              const nextSet = new Set<string>();
+              ownIds.forEach((id) => {
+                if (prevSet.size === 0 || prevSet.has(id)) nextSet.add(id);
+              });
+              return ownIds.filter((id) => nextSet.has(id));
+            });
+          }
+          if (event === 'bridge_self_app_status') {
+            if (payload?.status === 1) {
+              selfSessionReadyRef.current = true;
+              setSelfSessionReady(true);
+              setSelfQrUrl(null);
+              setSelfQrCode(null);
+            } else {
+              selfSessionReadyRef.current = false;
+              setSelfSessionReady(false);
+            }
+          }
+          if (event === 'basicapi_get_qrcode_tc') {
+            if (selfSessionReadyRef.current) return;
+            const qrCodeUrl = payload?.data?.qrcodeUrl;
+            const qrCodeRaw = payload?.data?.qrcode;
+            if (qrCodeUrl || qrCodeRaw) {
+              setSelfQrUrl(qrCodeUrl ?? null);
+              setSelfQrCode(typeof qrCodeRaw === 'string' ? qrCodeRaw : null);
+            }
           }
           if (
             event === 'basicapi_update_app_online_tc' ||
@@ -459,6 +535,54 @@ export function useBridgeSession(options: {
     };
   }, [peerConnected, socketIoConnected]);
 
+  useEffect(() => {
+    if (!socketIoConnected || selfSessionReady || roomId !== null) return;
+    const client = lovenseClientRef.current;
+    if (!client?.isSocketIoConnected) return;
+    const requestQr = () => {
+      client.sendEvent('bridge_self_get_qr', { ackId: String(Math.floor(Date.now() / 1000)) });
+    };
+    requestQr();
+    const id = setInterval(requestQr, 30000);
+    return () => clearInterval(id);
+  }, [socketIoConnected, selfSessionReady, roomId]);
+
+  const startPreflightSession = useCallback(async () => {
+    if (!BRIDGE_AVAILABLE || preflightHostTicketRef.current || roomId !== null) return;
+    setPreparingSession(true);
+    setError(null);
+    setStatus('connecting');
+    try {
+      const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostDisplayName: null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || `Failed to start partner session (status ${res.status})`);
+      }
+      const json = (await res.json()) as { roomId: string; pairCode: string; hostTicket: string };
+      preflightRoomIdRef.current = json.roomId;
+      preflightPairCodeRef.current = json.pairCode;
+      preflightHostTicketRef.current = json.hostTicket;
+      await registerLovenseWithBridge(json.hostTicket);
+      setupWebSocket(json.hostTicket, true);
+    } catch (e: unknown) {
+      setStatus('error');
+      setError(e instanceof Error ? e.message : 'Failed to prepare partner session.');
+    } finally {
+      setPreparingSession(false);
+    }
+  }, [roomId, setupWebSocket]);
+
+  useEffect(() => {
+    if (!enabled || roomId !== null) return;
+    if (!BRIDGE_AVAILABLE) return;
+    if (preflightHostTicketRef.current) return;
+    void startPreflightSession();
+  }, [enabled, roomId, startPreflightSession]);
+
   const createRoom = useCallback(async () => {
     if (!BRIDGE_AVAILABLE) {
       setStatus('error');
@@ -466,6 +590,13 @@ export function useBridgeSession(options: {
       return;
     }
     try {
+      if (preflightRoomIdRef.current && preflightPairCodeRef.current) {
+        setRoomId(preflightRoomIdRef.current);
+        setPairCode(preflightPairCodeRef.current);
+        setIsHost(true);
+        setStatus(peerConnected ? 'online' : 'waiting_partner');
+        return;
+      }
       setStatus('connecting');
       setError(null);
       const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms`, {
@@ -488,7 +619,7 @@ export function useBridgeSession(options: {
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to create room.');
     }
-  }, [setupWebSocket]);
+  }, [peerConnected, setupWebSocket]);
 
   const joinRoom = useCallback(async (code: string) => {
     if (!BRIDGE_AVAILABLE) {
@@ -502,6 +633,12 @@ export function useBridgeSession(options: {
       return;
     }
     try {
+      if (preflightHostTicketRef.current) {
+        closeSocket();
+        preflightRoomIdRef.current = null;
+        preflightPairCodeRef.current = null;
+        preflightHostTicketRef.current = null;
+      }
       setStatus('connecting');
       setError(null);
       const res = await fetch(`${BRIDGE_HTTP_BASE}/rooms/join`, {
@@ -524,7 +661,7 @@ export function useBridgeSession(options: {
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to join room.');
     }
-  }, [setupWebSocket]);
+  }, [closeSocket, setupWebSocket]);
 
   function buildLovenseCommandPayload(
     toyId: string,
@@ -551,25 +688,25 @@ export function useBridgeSession(options: {
   const sendCommand = useCallback(
     (toyId: string, action: string, timeSec: number = 0, loopRunningSec?: number, loopPauseSec?: number) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected) return;
+      if (!client?.isSocketIoConnected || !peerConnected) return;
       client.sendEvent(
         'basicapi_send_toy_command_ts',
         buildLovenseCommandPayload(toyId, action, timeSec, loopRunningSec, loopPauseSec)
       );
     },
-    []
+    [peerConnected]
   );
 
   const sendLovenseCommand = useCallback(
     (toyId: string, action: string, timeSec: number = 0, loopRunningSec?: number, loopPauseSec?: number) => {
       const client = lovenseClientRef.current;
-      if (!client?.isSocketIoConnected) return;
+      if (!client?.isSocketIoConnected || !peerConnected) return;
       client.sendEvent(
         'basicapi_send_toy_command_ts',
         buildLovenseCommandPayload(toyId, action, timeSec, loopRunningSec, loopPauseSec)
       );
     },
-    []
+    [peerConnected]
   );
 
   const disconnect = useCallback(() => {
@@ -624,14 +761,26 @@ export function useBridgeSession(options: {
   useEffect(() => {
     if (!lovenseClientRef.current?.isSocketIoConnected) return;
     if (activeToyIds === undefined && limits === undefined) return;
-    const enabledToyIds = activeToyIds ?? [];
-    const maxPower = maxPowerFromLimits(limits);
+    if (!hasSelfDeviceInfo) return;
+    const myToyIds = Object.keys(localToysFromBridge);
+    const enabledToyIds = localEnabledToyIds.filter((id) => myToyIds.includes(id));
+    const localLimits: Record<string, number> = {};
+    if (limits) {
+      for (const [featureId, value] of Object.entries(limits)) {
+        if (localFeatureIdSet.has(featureId)) localLimits[featureId] = value;
+      }
+    }
+    const maxPower = maxPowerFromLimits(localLimits);
     sendBridgeSetToyRules({
       enabledToyIds,
       ...(maxPower !== undefined && { maxPower }),
-      ...(limits && Object.keys(limits).length > 0 && { limits }),
+      ...(Object.keys(localLimits).length > 0 && { limits: localLimits }),
     });
-  }, [status, activeToyIds, limits, sendBridgeSetToyRules]);
+  }, [status, activeToyIds, limits, hasSelfDeviceInfo, localEnabledToyIds, localFeatureIdSet, localToysFromBridge, sendBridgeSetToyRules]);
+
+  const toggleLocalToyEnabled = useCallback((toyId: string) => {
+    setLocalEnabledToyIds((prev) => (prev.includes(toyId) ? prev.filter((id) => id !== toyId) : [...prev, toyId]));
+  }, []);
 
   return {
     status,
@@ -641,8 +790,16 @@ export function useBridgeSession(options: {
     isHost,
     peerConnected,
     remoteToys,
+    localToysFromBridge,
+    localEnabledToyIds,
+    toggleLocalToyEnabled,
     partnerEnabledToyIds,
     partnerLimits,
+    selfQrUrl,
+    selfQrCode,
+    selfSessionReady,
+    partnerSetupPhase,
+    preparingSession,
     rttMs,
     chatMessages,
     partnerTyping,

@@ -1,6 +1,6 @@
 # Partner bridge server specification
 
-This document describes the contract between the frontend and the **partner bridge server**. The reference implementation is **Python** (FastAPI, uvicorn) in the `bridge/` directory.
+This document describes the contract between the frontend and the **partner bridge server**. The reference implementation is the Cloudflare Worker + Durable Objects bridge in `workers/bridge/`.
 
 ---
 
@@ -8,7 +8,7 @@ This document describes the contract between the frontend and the **partner brid
 
 - **Host** and **partner (guest)** connect to the same bridge server.
 - The WebSocket speaks **Socket.IO / Engine.IO** with the **Lovense wire protocol** for toy commands and device/status events. The bridge also defines **bridge-specific events** for partner status, toy rules, and chat.
-- Each side registers their **Lovense session** with the server via `POST /getSocketUrl` (authToken + ticket). The server calls Lovense’s `getSocketUrl`, connects to the real Lovense WebSocket, and maintains a **backend tunnel** per participant (or reuses the host’s tunnel in self-pairing mode).
+- Each side registers their **Lovense session** with the server via `POST /register-session` (authToken + ticket). The server calls Lovense’s `getSocketUrl`, connects to the real Lovense WebSocket, and maintains a **backend tunnel** per participant (or reuses the host’s tunnel in self-pairing mode).
 - Once both are connected, the server **routes** so that:
   - The **host** sees the **guest’s** toys and can control them (commands go to the guest’s Lovense backend).
   - The **guest** sees the **host’s** toys and can control them (commands go to the host’s Lovense backend).
@@ -51,9 +51,9 @@ All HTTP endpoints are **rate-limited per client IP** (60-second window). On lim
   ```
 - **Response (404):** Room not found for the given pair code.
 
-### 1.3 Register Lovense session (getSocketUrl)
+### 1.3 Register Lovense session
 
-- **Request:** `POST /getSocketUrl`
+- **Request:** `POST /register-session`
 - **Body:**
   ```json
   {
@@ -136,14 +136,14 @@ The bridge caches the last device/status message from each backend and **replays
 **Host:**
 
 1. `POST /rooms` → get `roomId`, `pairCode`, `hostTicket`
-2. `POST /getSocketUrl` with `{ authToken, ticket: hostTicket, sessionProof? }`
+2. `POST /register-session` with `{ authToken, ticket: hostTicket, sessionProof? }`
 3. Open WebSocket: `/ws?ticket=<hostTicket>`
 4. Engine.IO handshake → send/receive Lovense and bridge events. Until the guest joins, partner status is disconnected; when guest connects, server sends cached device list and partner status/rules.
 
 **Guest:**
 
 1. `POST /rooms/join` with `{ pairCode }` → get `roomId`, `guestTicket`
-2. `POST /getSocketUrl` with `{ authToken, ticket: guestTicket, sessionProof? }`
+2. `POST /register-session` with `{ authToken, ticket: guestTicket, sessionProof? }`
 3. Open WebSocket: `/ws?ticket=<guestTicket>`
 4. Same handshake and event flow; guest sees host’s toys (and own toys if not self-pairing) and receives partner status/rules.
 
@@ -151,12 +151,11 @@ The bridge caches the last device/status message from each backend and **replays
 
 ## 4. Environment and run
 
-The bridge loads `.env` from the project root (so `JWT_SECRET` matches the Next.js app).
+The bridge uses Worker secrets / vars (so `JWT_SECRET` matches the Next.js app).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `JWT_SECRET` | Secret for tickets and sessionProof; must match Next.js. ≥32 chars in production. | `dev_secret_bridge_min_32_bytes_long` |
-| `BIND_ADDR` | Bind address for HTTP/WS. | `0.0.0.0:8000` |
 | `CORS_ORIGINS` | Comma-separated origins; empty in dev = `*`. | dev: `*`; prod: `[]` |
 | `BRIDGE_ENV` | Set to `production` for safe error messages and to forbid default JWT. | — |
 | `ALLOW_SELF_PAIRING` | `1` / `true` / `yes` to allow host and guest from the same session (e.g. two tabs). | off |
@@ -164,18 +163,16 @@ The bridge loads `.env` from the project root (so `JWT_SECRET` matches the Next.
 **Run:**
 
 ```bash
-python -m bridge
-# or
-python run_bridge.py
+npm run bridge:cf:dev
+# deploy
+npm run bridge:cf:deploy
 ```
-
-Equivalent to `uvicorn` on `BIND_ADDR` with the FastAPI app from `bridge.app.create_app()`.
 
 ---
 
 ## 5. Security (summary)
 
-- **Tickets** (hostTicket, guestTicket) are JWT signed with `JWT_SECRET`; they encode `roomId` and `role` and are validated on WebSocket upgrade and on `getSocketUrl`.
+- **Tickets** (hostTicket, guestTicket) are JWT signed with `JWT_SECRET`; they encode `roomId` and `role` and are validated on WebSocket upgrade and on `register-session`.
 - **Self-pairing:** If `ALLOW_SELF_PAIRING` is not set and the guest’s `sessionProof` decodes to the same `sessionId` as the host (or the same authToken is used), the bridge rejects the guest with 403 or disconnects the guest when the host registers.
 - **Toy rules:** Only the owner can set rules for their toys (`targetRole` must not be the other role). Commands for toys not in the owner’s `enabledToyIds` are dropped; `limits` and `maxPower` are applied on the bridge before sending to Lovense.
 
@@ -184,4 +181,4 @@ Equivalent to `uvicorn` on `BIND_ADDR` with the FastAPI app from `bridge.app.cre
 ## 6. Reference: Lovense API (server-side)
 
 - **getToken:** Done by the Next.js app; frontend never calls this on the bridge. Frontend gets `authToken` from `POST /api/lovense/socket`.
-- **getSocketUrl:** `POST https://api.lovense-api.com/api/basicApi/getSocketUrl` with `authToken`, `platform`. Use returned `socketIoUrl` and `socketIoPath` to build `wss://<host><path>?ntoken=<...>&EIO=3&transport=websocket`. Implementation: `bridge/lovense.py`.
+- **getSocketUrl:** `POST https://api.lovense-api.com/api/basicApi/getSocketUrl` with `authToken`, `platform`. Use returned `socketIoUrl` and `socketIoPath` to build `wss://<host><path>?ntoken=<...>&EIO=3&transport=websocket`.

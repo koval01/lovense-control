@@ -87,6 +87,8 @@ export const beTranslations: TranslationMap = {
   partnerModeTitle: 'Рэжым моста з партнёрам',
   partnerModeDescription:
     'У гэтым рэжыме партнёр кiруе вашымi цацкамi праз тунэль, якi правяраецца серверам, а вы — яго.',
+  partnerModeQrPhaseIntro:
+    'Адскануйце QR-код у праграме Lovense, каб аўтарызаваць сесію. Калі праграма падключыцца, можна будзе ўвайсці ў пакой або стварыць яго.',
   partnerModeCreateCode: 'Стварыць код запрашэння',
   partnerModeCreateCodeHint: 'Калі вы хочаце запрасіць партнёра — стварыце код і падзяліцеся ім.',
   partnerModeRequireSelfConnection:
@@ -112,6 +114,8 @@ export const beTranslations: TranslationMap = {
   partnerModePartnerNoToysHint: 'Папросіце суразмоўніка падключыць цацкі ў дадатку Lovense.',
   partnerModeConnected: 'Падлучана',
   selfModeExitToMenu: 'Выхад у галоўнае меню',
+  partnerTheirToysTitle: 'Цацкі партнёра',
+  partnerToyReadOnly: 'Толькі прагляд у рэжыме партнёра',
   partnerModeToyDisabledByOwner: 'Адключана партнёрам',
   partnerLimitLabel: 'Ліміт партнёра',
   partnerChatPlaceholder: 'Паведамленне...',

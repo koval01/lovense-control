@@ -83,6 +83,8 @@ export const ruTranslations: TranslationMap = {
   partnerModeTitle: 'Режим моста с партнером',
   partnerModeDescription:
     'В этом режиме партнер управляет вашими игрушками через проверенный сервером туннель, а вы — его.',
+  partnerModeQrPhaseIntro:
+    'Отсканируйте QR-код в приложении Lovense, чтобы авторизовать сессию. Когда приложение подключится, можно будет войти в комнату или создать её.',
   partnerModeCreateCode: 'Создать код приглашения',
   partnerModeCreateCodeHint: 'Если вы хотите пригласить партнёра — создайте код и поделитесь им.',
   partnerModeRequireSelfConnection:
@@ -108,6 +110,8 @@ export const ruTranslations: TranslationMap = {
   partnerModePartnerNoToysHint: 'Попросите собеседника подключить игрушки в приложении Lovense.',
   partnerModeConnected: 'Подключено',
   selfModeExitToMenu: 'Выход в главное меню',
+  partnerTheirToysTitle: 'Игрушки партнёра',
+  partnerToyReadOnly: 'Только просмотр в режиме партнёра',
   partnerModeToyDisabledByOwner: 'Отключено партнёром',
   partnerLimitLabel: 'Лимит партнёра',
   partnerChatPlaceholder: 'Сообщение...',

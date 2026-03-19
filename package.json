@@ -3,8 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "bridge": "python3 -m bridge",
-    "bridge:dev": "ALLOW_SELF_PAIRING=1 python3 -m bridge",
     "bridge:cf:dev": "wrangler dev --config wrangler.bridge.jsonc",
     "bridge:cf:deploy": "wrangler deploy --config wrangler.bridge.jsonc",
     "dev": "next dev",

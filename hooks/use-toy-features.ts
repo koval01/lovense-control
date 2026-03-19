@@ -37,6 +37,8 @@ export interface UseToyFeaturesOptions {
   isLooping?: boolean;
   /** IDs of toys that are allowed to receive commands. */
   activeToyIds?: string[];
+  /** Optional wider toy set used to initialize/persist limits. */
+  allToysForLimits?: Record<string, Toy>;
 }
 
 /** Manages features, levels, and limits from toys; dispatches throttled commands on level change. */
@@ -44,12 +46,16 @@ export function useToyFeatures(
   toys: Record<string, Toy>,
   options: UseToyFeaturesOptions
 ) {
-  const { onCommand, isLooping = false, activeToyIds } = options;
+  const { onCommand, isLooping = false, activeToyIds, allToysForLimits } = options;
   const dispatch = useAppDispatch();
   const limits = useAppSelector((state) => state.control.limits);
   const hasHydratedLimitsRef = useRef(false);
 
   const features = useMemo(() => buildToyFeatures(toys), [toys]);
+  const limitFeatures = useMemo(
+    () => (allToysForLimits ? buildToyFeatures(allToysForLimits) : features),
+    [allToysForLimits, features]
+  );
 
   const [levels, setLevels] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
@@ -63,8 +69,8 @@ export function useToyFeatures(
     const stored = hasHydratedLimitsRef.current ? null : loadStoredLimits();
     hasHydratedLimitsRef.current = true;
 
-    const nextLimits: Record<string, number> = {};
-    features.forEach((feature) => {
+    const nextLimits: Record<string, number> = { ...limits };
+    limitFeatures.forEach((feature) => {
       const saved = limits[feature.id] ?? stored?.[feature.id];
       const valid =
         typeof saved === 'number' &&
@@ -74,12 +80,11 @@ export function useToyFeatures(
       nextLimits[feature.id] = valid ? saved : feature.maxLevel;
     });
 
-    const hasRemoved = Object.keys(limits).some((featureId) => !(featureId in nextLimits));
-    const hasChanged = hasRemoved || Object.entries(nextLimits).some(([featureId, value]) => limits[featureId] !== value);
+    const hasChanged = Object.entries(nextLimits).some(([featureId, value]) => limits[featureId] !== value);
     if (hasChanged) {
       dispatch(setLimitsAction(nextLimits));
     }
-  }, [dispatch, features, limits]);
+  }, [dispatch, limitFeatures, limits]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

@@ -11,12 +11,16 @@ import {
   BRIDGE_CHAT_VOICE,
   BRIDGE_PING,
   BRIDGE_PONG,
+  BRIDGE_SELF_GET_QR,
+  BRIDGE_SELF_APP_STATUS,
+  BRIDGE_SELF_DEVICE_INFO,
   BRIDGE_SET_TOY_RULES,
+  LOVENSE_TOY_COMMAND_EVENT,
   buildAppMessage,
   isDeviceOrStatusEvent,
+  parseAppMessage,
   partnerStatusMsg,
   partnerToyRulesMsg,
-  parseAppMessage,
   type RoomRules,
 } from './protocol';
 import {
@@ -65,6 +69,8 @@ export class BridgeRoom extends DurableObject<Env> {
   private hostAuthToken: string | null = null;
   private hostSessionId: string | null = null;
   private guestSessionId: string | null = null;
+  private hostSessionReady = false;
+  private guestSessionReady = false;
   private guestUsesHostBackend = false;
   private rules: RoomRules = {
     hostEnabledToyIds: null,
@@ -120,8 +126,17 @@ export class BridgeRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const path = BridgeRoom.normalizePath(url.pathname);
 
-    if (request.method === 'POST' && (path === '/internal/register' || path === '/getSocketUrl')) {
+    if (
+      request.method === 'POST' &&
+      (path === '/internal/register' || path === '/register-session' || path === '/getSocketUrl')
+    ) {
       return this.handleRegister(request);
+    }
+    if (request.method === 'GET' && path === '/internal/ready') {
+      return Response.json({
+        hostReady: this.hostSessionReady,
+        guestReady: this.guestSessionReady,
+      });
     }
     if (request.method === 'GET' && (path === '/internal/ws' || path === '/ws')) {
       return this.handleWebSocketUpgrade(request);
@@ -180,6 +195,7 @@ export class BridgeRoom extends DurableObject<Env> {
     if (role === 'host') {
       this.hostAuthToken = authToken;
       this.hostSessionId = guestSessionId;
+      this.hostSessionReady = false;
     }
 
     const allowSelfPairing =
@@ -211,6 +227,7 @@ export class BridgeRoom extends DurableObject<Env> {
         }
       }
       this.guestSessionId = guestSessionId ?? undefined;
+      this.guestSessionReady = false;
     }
 
     if (role === 'host' && !allowSelfPairing && this.guestSessionId && this.hostSessionId) {
@@ -307,8 +324,30 @@ export class BridgeRoom extends DurableObject<Env> {
         this.lastGuestBackendMsg = data;
       }
     }
-    const frontend = fromBackendRole === 'host' ? this.guestFrontend : this.hostFrontend;
-    if (frontend) this.sendToWebSocket(frontend, data);
+    const parsed = parseAppMessage(data);
+    if (parsed) {
+      const [event, payload] = parsed;
+      const selfFrontend = fromBackendRole === 'host' ? this.hostFrontend : this.guestFrontend;
+      if (
+        selfFrontend &&
+        (event === 'basicapi_update_device_info_tc' || event === 'basicApi_update_device_info')
+      ) {
+        this.sendToWebSocket(selfFrontend, buildAppMessage(BRIDGE_SELF_DEVICE_INFO, payload as Record<string, unknown>));
+      } else if (
+        selfFrontend &&
+        (event === 'basicapi_update_app_online_tc' || event === 'basicapi_update_app_status_tc')
+      ) {
+        const status = (payload as { status?: unknown }).status;
+        if (fromBackendRole === 'host') this.hostSessionReady = status === 1;
+        else this.guestSessionReady = status === 1;
+        this.sendToWebSocket(selfFrontend, buildAppMessage(BRIDGE_SELF_APP_STATUS, payload as Record<string, unknown>));
+      } else if (selfFrontend && event === 'basicapi_get_qrcode_tc') {
+        this.sendToWebSocket(selfFrontend, data);
+      }
+    }
+
+    const peerFrontend = fromBackendRole === 'host' ? this.guestFrontend : this.hostFrontend;
+    if (peerFrontend) this.sendToWebSocket(peerFrontend, data);
   }
 
   private queueToBackend(role: 'host' | 'guest', msg: string): void {
@@ -319,6 +358,24 @@ export class BridgeRoom extends DurableObject<Env> {
     } else {
       queue.push(msg);
     }
+  }
+
+  private forceStopToyOnOwnerBackend(ownerRole: 'host' | 'guest', toyId: string): void {
+    const backendRole: 'host' | 'guest' =
+      ownerRole === 'host' ? 'host' : this.guestUsesHostBackend ? 'host' : 'guest';
+    const stopPayload: Record<string, unknown> = {
+      command: 'Function',
+      action: 'Stop',
+      timeSec: 0,
+      apiVer: 1,
+      toy: toyId,
+    };
+    this.queueToBackend(backendRole, buildAppMessage(LOVENSE_TOY_COMMAND_EVENT, stopPayload));
+  }
+
+  private ownerBackendRole(ownerRole: 'host' | 'guest'): 'host' | 'guest' {
+    if (ownerRole === 'host') return 'host';
+    return this.guestUsesHostBackend ? 'host' : 'guest';
   }
 
   private async handleWebSocketUpgrade(request: Request): Promise<Response> {
@@ -362,6 +419,10 @@ export class BridgeRoom extends DurableObject<Env> {
     }
     this.cleanupAlarmScheduled = false;
 
+    // Notify the already connected peer that partner is back online.
+    const other = role === 'host' ? this.guestFrontend : this.hostFrontend;
+    if (other) this.sendToWebSocket(other, partnerStatusMsg(true));
+
     this.replayState(server, role);
 
     server.send(ENGINE_OPEN);
@@ -387,6 +448,18 @@ export class BridgeRoom extends DurableObject<Env> {
   private replayState(ws: WebSocket, role: 'host' | 'guest'): void {
     const cached = role === 'host' ? this.lastGuestBackendMsg : this.lastHostBackendMsg;
     if (cached) this.sendToWebSocket(ws, cached);
+    const ownCached = role === 'host' ? this.lastHostBackendMsg : this.lastGuestBackendMsg;
+    if (ownCached) {
+      const parsed = parseAppMessage(ownCached);
+      if (parsed) {
+        const [event, payload] = parsed;
+        if (event === 'basicapi_update_device_info_tc' || event === 'basicApi_update_device_info') {
+          this.sendToWebSocket(ws, buildAppMessage(BRIDGE_SELF_DEVICE_INFO, payload as Record<string, unknown>));
+        } else if (event === 'basicapi_update_app_online_tc' || event === 'basicapi_update_app_status_tc') {
+          this.sendToWebSocket(ws, buildAppMessage(BRIDGE_SELF_APP_STATUS, payload as Record<string, unknown>));
+        }
+      }
+    }
     const other = role === 'host' ? this.guestFrontend : this.hostFrontend;
     if (other) this.sendToWebSocket(ws, partnerStatusMsg(true));
     if (other && partnerHasRules(this.rules, role)) {
@@ -423,6 +496,14 @@ export class BridgeRoom extends DurableObject<Env> {
 
     if (event === BRIDGE_SET_TOY_RULES) {
       const payload = (payloadRaw as Record<string, unknown>) ?? {};
+      const prevEnabledIds =
+        role === 'host'
+          ? this.rules.hostEnabledToyIds
+            ? new Set(this.rules.hostEnabledToyIds)
+            : null
+          : this.rules.guestEnabledToyIds
+            ? new Set(this.rules.guestEnabledToyIds)
+            : null;
       const ok = applySetToyRulesPayload(
         {
           enabledToyIds: payload.enabledToyIds as string[] | undefined,
@@ -434,11 +515,28 @@ export class BridgeRoom extends DurableObject<Env> {
         this.rules
       );
       if (ok) {
+        if (payload.enabledToyIds != null) {
+          const nextEnabledIds = role === 'host' ? this.rules.hostEnabledToyIds : this.rules.guestEnabledToyIds;
+          if (prevEnabledIds && nextEnabledIds) {
+            for (const toyId of prevEnabledIds) {
+              if (!nextEnabledIds.has(toyId)) {
+                this.forceStopToyOnOwnerBackend(role, toyId);
+              }
+            }
+          }
+        }
         const other = role === 'host' ? this.guestFrontend : this.hostFrontend;
         if (other) {
           this.sendToWebSocket(other, partnerToyRulesMsg(role, this.rules));
         }
       }
+    } else if (event === BRIDGE_SELF_GET_QR) {
+      const backendRole = this.ownerBackendRole(role);
+      const ackId = Math.floor(Date.now() / 1000).toString();
+      this.queueToBackend(
+        backendRole,
+        buildAppMessage('basicapi_get_qrcode_ts', { ackId })
+      );
     } else if (FORWARD_ONLY_EVENTS.has(event)) {
       const other = role === 'host' ? this.guestFrontend : this.hostFrontend;
       if (other) this.sendToWebSocket(other, data);
@@ -489,6 +587,9 @@ export class BridgeRoom extends DurableObject<Env> {
       const other = role === 'host' ? this.guestFrontend : this.hostFrontend;
       if (other) this.sendToWebSocket(other, out);
     } else {
+      // Room is symmetric: toy control is allowed only while both participants are connected.
+      // If either frontend disconnects, commands are blocked until reconnection.
+      if (!this.hostFrontend || !this.guestFrontend) return;
       const toGuestBackend = role === 'host';
       const targetBackendRole: 'host' | 'guest' =
         toGuestBackend && !this.guestUsesHostBackend ? 'guest' : 'host';

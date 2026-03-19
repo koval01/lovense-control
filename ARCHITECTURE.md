@@ -90,13 +90,13 @@ When **partner mode** is enabled (e.g. user chooses "Create room" or "Join with 
 **Flow:**
 
 1. **Create or join room** — Host: `POST <bridge>/rooms` → `roomId`, `pairCode`, `hostTicket`. Guest: `POST <bridge>/rooms/join` with `pairCode` → `roomId`, `guestTicket`.
-2. **Register Lovense with bridge** — Frontend gets `authToken` (and optional `sessionProof`) from the app via `GET /api/session` and `POST /api/lovense/socket`, then `POST <bridge>/getSocketUrl` with `{ authToken, ticket, sessionProof? }`. The bridge calls Lovense getSocketUrl and spawns a backend tunnel (or reuses the host’s in self-pairing).
+2. **Register Lovense with bridge** — Frontend gets `authToken` (and optional `sessionProof`) from the app via `GET /api/session` and `POST /api/lovense/socket`, then `POST <bridge>/register-session` with `{ authToken, ticket, sessionProof? }`. The bridge calls Lovense getSocketUrl and spawns a backend tunnel (or reuses the host’s in self-pairing).
 3. **WebSocket** — Client opens `wss://<bridge>/ws?ticket=<ticket>`. Same Engine.IO / Socket.IO handshake as direct Lovense; then Lovense events (device list, commands) and bridge events (partner status, toy rules, chat) are exchanged.
 4. **Rules and chat** — Each side sends `bridge_set_toy_rules` (enabled toys, max power, limits) so the bridge enforces what the partner can control. Chat and typing use `bridge_chat_message`, `bridge_chat_typing`; history is replayed on connect.
 
 **Client:** [hooks/use-bridge-session.ts](hooks/use-bridge-session.ts) — `createRoom`, `joinRoom`, `registerLovenseWithBridge`, `LovenseWsClient` with the same protocol; handles `bridge_partner_status`, `bridge_partner_toy_rules`, chat, and sends commands via `basicapi_send_toy_command_ts` and rules via `bridge_set_toy_rules`. Bridge base URL comes from `NEXT_PUBLIC_BRIDGE_SERVER_URL`.
 
-**Contract:** See [docs/BRIDGE_SERVER_SPEC.md](docs/BRIDGE_SERVER_SPEC.md) for HTTP API, WebSocket events, and environment. The reference implementation is the Python bridge in `bridge/`.
+**Contract:** See [docs/BRIDGE_SERVER_SPEC.md](docs/BRIDGE_SERVER_SPEC.md) for HTTP API, WebSocket events, and environment. The current implementation is the Cloudflare Worker in `workers/bridge/`.
 
 ## API Endpoints
 
@@ -109,7 +109,7 @@ When **partner mode** is enabled (e.g. user chooses "Create room" or "Join with 
 - `POST /api/lovense/socket-url`
   - Exchanges `authToken` for WebSocket URL and returns `wsUrl` (used in self mode only).
 
-**Partner mode:** The frontend calls the **bridge** directly using `NEXT_PUBLIC_BRIDGE_SERVER_URL`: `POST <bridge>/rooms`, `POST <bridge>/rooms/join`, `POST <bridge>/getSocketUrl`, and `GET <bridge>/ws?ticket=...`. The app’s `GET /api/session` and `POST /api/lovense/socket` are still used to obtain `authToken` and `sessionProof` before registering with the bridge.
+**Partner mode:** The frontend calls the **bridge** directly using `NEXT_PUBLIC_BRIDGE_SERVER_URL`: `POST <bridge>/rooms`, `POST <bridge>/rooms/join`, `POST <bridge>/register-session`, and `GET <bridge>/ws?ticket=...`. The app’s `GET /api/session` and `POST /api/lovense/socket` are still used to obtain `authToken` and `sessionProof` before registering with the bridge.
 
 ## Code Splitting and Performance
 

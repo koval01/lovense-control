@@ -4,32 +4,17 @@
  */
 
 import { DurableObject } from 'cloudflare:workers';
-import { createTicket } from './auth';
+import { registryCreateRoomResponse } from './registry-create-room';
+import { registryJoinRoomResponse } from './registry-join-room';
+import { registryRemoveRoomResponse } from './registry-remove-room';
+import type { BridgeRegistryEnv } from './registry-env';
 
-const PAIR_CODE_LENGTH = 8;
-const PAIR_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const KV_PREFIX_PAIR = 'pc:';
-const KV_PREFIX_ROOM = 'room:';
+export type { BridgeRegistryEnv as Env } from './registry-env';
 
-function generatePairCode(): string {
-  let result = '';
-  const chars = PAIR_CODE_CHARS;
-  for (let i = 0; i < PAIR_CODE_LENGTH; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-}
-
-export interface Env {
-  JWT_SECRET: string;
-  BRIDGE_REGISTRY: DurableObjectNamespace;
-  BRIDGE_ROOM: DurableObjectNamespace;
-}
-
-export class BridgeRegistry extends DurableObject<Env> {
+export class BridgeRegistry extends DurableObject<BridgeRegistryEnv> {
   private ctx: DurableObjectState;
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: BridgeRegistryEnv) {
     super(ctx, env);
     this.ctx = ctx;
   }
@@ -43,103 +28,18 @@ export class BridgeRegistry extends DurableObject<Env> {
     const path = url.pathname;
 
     if (request.method === 'POST' && path === '/internal/create-room') {
-      return this.handleCreateRoom(request);
+      return registryCreateRoomResponse(this.kv(), this.env.JWT_SECRET);
     }
     if (request.method === 'POST' && path === '/internal/join-room') {
-      return this.handleJoinRoom(request);
+      const body = (await request.json()) as { pairCode?: string };
+      const pairCode = (body.pairCode ?? '').toString();
+      return registryJoinRoomResponse(this.kv(), this.env, pairCode);
     }
     if (request.method === 'POST' && path === '/internal/remove-room') {
-      return this.handleRemoveRoom(request);
+      const roomId = url.searchParams.get('roomId');
+      return registryRemoveRoomResponse(this.kv(), roomId);
     }
 
     return new Response('Not Found', { status: 404 });
   }
-
-  private async handleCreateRoom(request: Request): Promise<Response> {
-    const secret = this.env.JWT_SECRET;
-    if (!secret) {
-      return Response.json({ error: 'JWT_SECRET not configured' }, { status: 500 });
-    }
-
-    const roomId = crypto.randomUUID();
-    const kv = this.kv();
-    let pairCode = generatePairCode();
-    for (let i = 0; i < 100; i++) {
-      if (!kv.get(KV_PREFIX_PAIR + pairCode)) break;
-      pairCode = generatePairCode();
-    }
-
-    kv.put(KV_PREFIX_PAIR + pairCode, roomId);
-    kv.put(KV_PREFIX_ROOM + roomId, pairCode);
-    const hostTicket = await createTicket(roomId, 'host', secret);
-    console.log(`[BridgeRegistry] Room created: roomId=${roomId} pairCode=${pairCode}`);
-
-    return Response.json({
-      roomId,
-      pairCode,
-      hostTicket,
-    });
-  }
-
-  private async handleRemoveRoom(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const roomId = url.searchParams.get('roomId');
-    if (!roomId) {
-      return new Response('roomId required', { status: 400 });
-    }
-    const kv = this.kv();
-    const pairCode = kv.get(KV_PREFIX_ROOM + roomId) as string | undefined;
-    if (pairCode) {
-      kv.delete(KV_PREFIX_PAIR + pairCode);
-      kv.delete(KV_PREFIX_ROOM + roomId);
-    }
-    return new Response(null, { status: 204 });
-  }
-
-  private async handleJoinRoom(request: Request): Promise<Response> {
-    const body = (await request.json()) as { pairCode?: string };
-    const pairCode = (body.pairCode ?? '').toString().toUpperCase();
-    if (!pairCode) {
-      return Response.json({ error: 'pairCode required' }, { status: 400 });
-    }
-
-    const roomId = this.kv().get(KV_PREFIX_PAIR + pairCode) as string | undefined;
-    if (!roomId) {
-      return Response.json({ detail: 'Room not found' }, { status: 404 });
-    }
-
-    // Server-side guard: do not allow opening a real guest session until
-    // host session is confirmed online on Lovense side (QR completed).
-    try {
-      const roomDoId = this.env.BRIDGE_ROOM.idFromName(roomId);
-      const roomStub = this.env.BRIDGE_ROOM.get(roomDoId);
-      const readyRes = await roomStub.fetch('https://internal/internal/ready');
-      if (!readyRes.ok) {
-        return Response.json({ detail: 'Room not ready yet' }, { status: 409 });
-      }
-      const ready = (await readyRes.json()) as { hostReady?: boolean };
-      if (!ready.hostReady) {
-        return Response.json(
-          { detail: 'Host session is not verified yet. Complete QR setup first.' },
-          { status: 409 }
-        );
-      }
-    } catch {
-      return Response.json({ detail: 'Room not ready yet' }, { status: 409 });
-    }
-
-    const secret = this.env.JWT_SECRET;
-    if (!secret) {
-      return Response.json({ error: 'JWT_SECRET not configured' }, { status: 500 });
-    }
-
-    const guestTicket = await createTicket(roomId, 'guest', secret);
-    console.log(`[BridgeRegistry] Guest joined: roomId=${roomId} pairCode=${pairCode}`);
-
-    return Response.json({
-      roomId,
-      guestTicket,
-    });
-  }
-
 }

@@ -1,38 +1,16 @@
 'use client';
 
-/**
- * Draggable bubble for a single feature in float mode.
- * Y-position maps to power level; dragging near another bubble enables merge.
- *
- * Uses useMotionValue + style for positioning so framer-motion's drag gesture
- * manipulates the same motion values we control externally.  This avoids the
- * snap-back that occurs when animate/initial fight with the drag offset.
- */
-
 import { useLayoutEffect } from 'react';
 import { motion, useMotionValue } from 'motion/react';
-import type { ToyFeature } from '@/lib/lovense-domain';
-import type { BubblePosition } from '@/lib/lovense-domain';
+import { getFeatureBubbleShadows } from '@/components/feature-bubble-shadows';
+import { findClosestBubbleNeighbor } from '@/components/feature-bubble-merge';
+import type { FeatureBubbleProps } from '@/components/feature-bubble-types';
 
-export interface FeatureBubbleProps {
-  feature: ToyFeature;
-  index: number;
-  position: BubblePosition;
-  bubbleSize: number;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  bubblePositions: Record<string, BubblePosition>;
-  isMergeTarget: boolean;
-  isFeatureInGroup: (id: string) => boolean;
-  onLevelChange: (percentage: number) => void;
-  onDragEnd: (releaseX: number, releaseY: number, rectHeight: number) => void;
-  onMergePreview: (sourceId: string, targetId: string | null) => void;
-  onPositionChange: (x: number, y: number) => void;
-  demoTargetId?: string;
-}
+export type { FeatureBubbleProps } from '@/components/feature-bubble-types';
 
 export function FeatureBubble({
   feature,
-  index,
+  index: _index,
   position,
   bubbleSize,
   containerRef,
@@ -56,23 +34,7 @@ export function FeatureBubble({
 
   const iconSizeClass = bubbleSize < 60 ? 'w-5 h-5' : 'w-6 h-6';
   const labelClass = bubbleSize < 60 ? 'text-[8px]' : 'text-[9px]';
-
-  // Lovense-style: first=pink with glow, second+=blue solid (no glow)
-  const isFirst = feature.color === '#f20c7f';
-  const glowColor = `${feature.color}50`;
-  const glowColorStrong = `${feature.color}70`;
-  const baseShadow = isFirst
-    ? bubbleSize < 60
-      ? `0 2px 8px rgba(0,0,0,0.25), 0 0 16px ${glowColor}, 0 0 28px ${glowColor}`
-      : `0 3px 12px rgba(0,0,0,0.3), 0 0 24px ${glowColor}, 0 0 40px ${glowColor}`
-    : bubbleSize < 60
-      ? '0 2px 8px rgba(0,0,0,0.25)'
-      : '0 3px 12px rgba(0,0,0,0.3)';
-  const dragShadow = isFirst
-    ? bubbleSize < 60
-      ? `0 2px 8px rgba(0,0,0,0.25), 0 0 20px ${glowColorStrong}, 0 0 36px ${glowColor}, 0 0 52px ${glowColor}80`
-      : `0 3px 12px rgba(0,0,0,0.3), 0 0 32px ${glowColorStrong}, 0 0 48px ${glowColor}, 0 0 64px ${glowColor}80`
-    : baseShadow;
+  const { baseShadow, dragShadow } = getFeatureBubbleShadows(feature.color, bubbleSize);
 
   return (
     <motion.div
@@ -91,28 +53,9 @@ export function FeatureBubble({
         const rect = containerRef.current.getBoundingClientRect();
         onPositionChange(mvX.get(), mvY.get());
         const y = info.point.y - rect.top;
-        let percentage = 1 - y / rect.height;
-        percentage = Math.max(0, Math.min(1, percentage));
-        onLevelChange(percentage * 100);
-
+        onLevelChange(Math.max(0, Math.min(1, 1 - y / rect.height)) * 100);
         const x = info.point.x - rect.left;
-        let closestId: string | null = null;
-        let closestDist = Infinity;
-        Object.entries(bubblePositions).forEach(([otherId, otherPos]) => {
-          if (otherId === feature.id || isFeatureInGroup(otherId)) return;
-          const dx = otherPos.x - x;
-          const dy = otherPos.y - y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestId = otherId;
-          }
-        });
-        if (closestId && closestDist < bubbleSize) {
-          onMergePreview(feature.id, closestId);
-        } else {
-          onMergePreview(feature.id, null);
-        }
+        onMergePreview(feature.id, findClosestBubbleNeighbor(x, y, feature.id, bubblePositions, isFeatureInGroup, bubbleSize));
       }}
       onDragEnd={() => {
         if (!containerRef.current) return;

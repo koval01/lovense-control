@@ -1,70 +1,21 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import QRCodeStyling from 'qr-code-styling';
 import { Spinner } from '@vkontakte/vkui';
 import { motion, AnimatePresence } from 'motion/react';
 import { fadeVariants } from '@/constants/animation-variants';
 import { useI18n } from '@/contexts/i18n-context';
-
-const QR_SIZE = 240;
+import { StatusQrSkeleton } from './StatusQrSkeleton';
+import { useStatusQrEffects } from './useStatusQrEffects';
 
 export interface StatusQrViewProps {
   qrUrl: string | null;
-  /** Raw QR payload from Lovense (data.qrcode). When set, we generate our own QR and do not request the image URL. */
   qrCode?: string | null;
-  /** When true, use smaller heading and tighter spacing (e.g. when embedded in partner mode). */
   compact?: boolean;
 }
 
-function QrSkeleton() {
-  return <div className="qr-skeleton w-full h-full rounded-2xl" aria-hidden />;
-}
-
 export function StatusQrView({ qrUrl, qrCode, compact = false }: StatusQrViewProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [qrReady, setQrReady] = useState(false);
-  const qrContainerRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
-
-  // Preload Lovense image only when we have no raw qrCode (fallback path) — then we don't request their server
-  useEffect(() => {
-    setImageLoaded(false);
-    if (!qrUrl || qrCode) return;
-
-    const preloader = new window.Image();
-    preloader.referrerPolicy = 'no-referrer';
-    preloader.onload = () => setImageLoaded(true);
-    preloader.onerror = () => setImageLoaded(false);
-    preloader.src = qrUrl;
-  }, [qrUrl, qrCode]);
-
-  // When we have qrCode, render QR via library into our container (no image request)
-  useEffect(() => {
-    setQrReady(false);
-    if (!qrCode || typeof qrCode !== 'string' || !qrContainerRef.current) return;
-
-    const container = qrContainerRef.current;
-    // Классический QR без скруглений и без логотипа — SDK сканера в Lovense Connect очень старый, читает только такой вариант.
-    const qr = new QRCodeStyling({
-      width: QR_SIZE,
-      height: QR_SIZE,
-      type: 'svg',
-      data: qrCode,
-      margin: 4,
-      qrOptions: { errorCorrectionLevel: 'M' },
-      dotsOptions: { type: 'square', color: '#000000' },
-      cornersSquareOptions: { type: 'square', color: '#000000' },
-      cornersDotOptions: { type: 'square', color: '#000000' },
-      backgroundOptions: { color: '#ffffff' },
-    });
-    qr.append(container);
-    setQrReady(true);
-
-    return () => {
-      container.innerHTML = '';
-    };
-  }, [qrCode]);
+  const { imageLoaded, qrReady, qrContainerRef, qrSize } = useStatusQrEffects(qrUrl, qrCode);
 
   const useSvg = Boolean(qrCode);
   const useImage = !qrCode && qrUrl;
@@ -97,10 +48,7 @@ export function StatusQrView({ qrUrl, qrCode, compact = false }: StatusQrViewPro
       >
         {t('qrInstruction')}
       </p>
-      <div
-        className="relative"
-        style={{ width: QR_SIZE, height: QR_SIZE, marginBottom: compact ? 16 : 32 }}
-      >
+      <div className="relative" style={{ width: qrSize, height: qrSize, marginBottom: compact ? 16 : 32 }}>
         <AnimatePresence mode="wait">
           {showSkeleton ? (
             <motion.div
@@ -110,7 +58,7 @@ export function StatusQrView({ qrUrl, qrCode, compact = false }: StatusQrViewPro
               transition={{ duration: 0.2 }}
               className="absolute inset-0 flex items-center justify-center"
             >
-              <QrSkeleton />
+              <StatusQrSkeleton />
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -145,9 +93,7 @@ export function StatusQrView({ qrUrl, qrCode, compact = false }: StatusQrViewPro
           />
         ) : null}
       </div>
-      <div className="flex items-center gap-3 text-sm font-medium text-[var(--app-text-secondary)] bg-[var(--app-bg-elevated)] border border-[var(--app-border)] px-6 py-3 rounded-full whitespace-nowrap shadow-[var(--app-shadow)]">
-        <Spinner size="m" /> <span>{t('waitingForAppConnection')}</span>
-      </div>
+      <div className="flex items-center gap-3 text-sm font-medium text-[var(--app-text-secondary)] bg-[var(--app-bg-elevated)] border border-[var(--app-border)] px-6 py-3 rounded-full whitespace-nowrap shadow-[var(--app-shadow)]"><Spinner size="m" /><span>{t('waitingForAppConnection')}</span></div>
     </motion.div>
   );
 }

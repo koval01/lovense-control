@@ -1,90 +1,19 @@
-import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import axios from 'axios';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { Toy } from '@/lib/lovense-domain';
-import { extractRequestError, internalApiClient } from '@/lib/api/internal-client';
+import { registerConnectionExtraReducers } from './connectionExtraReducers';
+import {
+  connectionInitialState,
+  type ConnectionMode,
+  type ConnectionState,
+  type LovenseStatus,
+} from './connectionState';
 
-export type LovenseStatus = 'idle' | 'initializing' | 'connecting' | 'qr_ready' | 'online' | 'error';
-export type ConnectionMode = 'unselected' | 'self' | 'partner';
-
-interface InitSessionResponse {
-  authToken: string;
-  uid: string;
-}
-
-interface SocketUrlResponse {
-  wsUrl: string;
-}
-
-export interface ConnectionState {
-  enabled: boolean;
-  mode: ConnectionMode;
-  /**
-   * Bumped when entering or leaving partner mode so bridge hook can drop stale
-   * async work and avoid duplicate WebSockets (e.g. exit room → re-enter).
-   */
-  bridgeSocketGeneration: number;
-  status: LovenseStatus;
-  /** URL of Lovense-provided QR image (fallback when raw qrCode is missing). */
-  qrUrl: string | null;
-  /** Raw QR payload from Lovense Socket API (data.qrcode) — use to generate our own SVG. */
-  qrCode: string | null;
-  toys: Record<string, Toy>;
-  error: string | null;
-  reconnectAttempt: number;
-  sessionStarted: boolean;
-}
-
-const initialState: ConnectionState = {
-  enabled: true,
-  mode: 'unselected',
-  bridgeSocketGeneration: 0,
-  status: 'initializing',
-  qrUrl: null,
-  qrCode: null,
-  toys: {},
-  error: null,
-  reconnectAttempt: 0,
-  sessionStarted: false,
-};
-
-export const initializeLovenseSession = createAsyncThunk<
-  { wsUrl: string },
-  void,
-  { rejectValue: string }
->('connection/initializeLovenseSession', async (_, { rejectWithValue }) => {
-  try {
-    await internalApiClient.get('/api/session');
-    let socketAuth: InitSessionResponse;
-    try {
-      const response = await internalApiClient.post<InitSessionResponse>('/api/lovense/socket', {});
-      socketAuth = response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        await internalApiClient.get('/api/session');
-        const retryResponse = await internalApiClient.post<InitSessionResponse>('/api/lovense/socket', {});
-        socketAuth = retryResponse.data;
-      } else {
-        throw error;
-      }
-    }
-
-    const { data: socketUrl } = await internalApiClient.post<SocketUrlResponse>('/api/lovense/socket-url', {
-      authToken: socketAuth.authToken,
-    });
-
-    if (!socketUrl.wsUrl) {
-      return rejectWithValue('Failed to initialize socket URL');
-    }
-
-    return { wsUrl: socketUrl.wsUrl };
-  } catch (error) {
-    return rejectWithValue(extractRequestError(error, 'Failed to initialize session'));
-  }
-});
+export type { ConnectionMode, ConnectionState, LovenseStatus };
+export { initializeLovenseSession } from './connectionThunks';
 
 const connectionSlice = createSlice({
   name: 'connection',
-  initialState,
+  initialState: connectionInitialState,
   reducers: {
     setMode(state, action: PayloadAction<ConnectionMode>) {
       const next = action.payload;
@@ -140,26 +69,11 @@ const connectionSlice = createSlice({
       state.reconnectAttempt = 0;
       state.sessionStarted = false;
     },
-    /** Invalidate in-flight bridge work (e.g. full reset while still in partner mode). */
     bumpBridgeSocketGeneration(state) {
       state.bridgeSocketGeneration += 1;
     },
   },
-  extraReducers: (builder) => {
-    builder
-      .addCase(initializeLovenseSession.pending, (state) => {
-        state.status = 'initializing';
-        state.error = null;
-      })
-      .addCase(initializeLovenseSession.fulfilled, (state) => {
-        state.status = 'connecting';
-        state.error = null;
-      })
-      .addCase(initializeLovenseSession.rejected, (state, action) => {
-        state.status = 'error';
-        state.error = action.payload || action.error.message || 'Failed to initialize session';
-      });
-  },
+  extraReducers: (builder) => registerConnectionExtraReducers(builder),
 });
 
 export const {

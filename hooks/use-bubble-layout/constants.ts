@@ -1,0 +1,2 @@
+export const DEFAULT_BUBBLE_SIZE = 64;
+export const DEFAULT_CONTAINER_HEIGHT = 400;

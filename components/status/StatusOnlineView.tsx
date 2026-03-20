@@ -7,7 +7,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { EmptyState } from './EmptyState';
 import { OnlineToyGrid } from '@/components/status/OnlineToyGrid';
 import { OnlineControlsPanel } from '@/components/status/OnlineControlsPanel';
-
 import type { TranslationKey } from '@/lib/i18n';
 
 export interface StatusOnlineViewProps {

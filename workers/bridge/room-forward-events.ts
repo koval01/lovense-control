@@ -1,0 +1,3 @@
+import { BRIDGE_CHAT_TYPING, BRIDGE_PING, BRIDGE_PONG } from './protocol';
+
+export const FORWARD_ONLY_EVENTS = new Set<string>([BRIDGE_PING, BRIDGE_PONG, BRIDGE_CHAT_TYPING]);

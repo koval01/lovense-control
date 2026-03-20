@@ -2,14 +2,14 @@
 
 /**
  * Draggable bubble for a merged group of features in float mode.
- * Uses useMotionValue for positioning (same approach as FeatureBubble).
  */
 
 import { useLayoutEffect } from 'react';
 import { motion, useMotionValue } from 'motion/react';
-import type { ToyFeature, FeatureGroup } from '@/lib/lovense-domain';
-import type { BubblePosition } from '@/lib/lovense-domain';
+import type { ToyFeature, FeatureGroup, BubblePosition } from '@/lib/lovense-domain';
 import { useI18n } from '@/contexts/i18n-context';
+import { getGroupBubbleShadows } from '@/components/feature-group-bubble-shadows';
+import { FeatureGroupBubbleLabels } from '@/components/FeatureGroupBubbleLabels';
 
 export interface FeatureGroupBubbleProps {
   group: FeatureGroup;
@@ -26,7 +26,7 @@ export interface FeatureGroupBubbleProps {
 export function FeatureGroupBubble({
   group,
   groupFeatures,
-  index,
+  index: _index,
   position,
   bubbleSize,
   containerRef,
@@ -34,28 +34,13 @@ export function FeatureGroupBubble({
   onPositionChange,
   onDragEnd,
 }: FeatureGroupBubbleProps) {
-  const Icon = groupFeatures[0]?.icon;
   const { t } = useI18n();
   const mvX = useMotionValue(position.x);
   const mvY = useMotionValue(position.y);
-  const iconSizeClass = bubbleSize < 60 ? 'w-5 h-5' : 'w-6 h-6';
-  const namesClass = bubbleSize < 60 ? 'text-[7px]' : 'text-[8px]';
-  const countClass = bubbleSize < 60 ? 'text-[7px]' : 'text-[8px]';
 
-  // Two elements: pink-to-blue gradient; one element: pink (group.color)
   const isDual = groupFeatures.length >= 2;
   const groupBg = isDual ? 'var(--app-gradient-accent)' : group.color;
-
-  const glowColor = `${group.color}50`;
-  const glowColorStrong = `${group.color}70`;
-  const baseShadow =
-    bubbleSize < 60
-      ? `0 2px 8px rgba(0,0,0,0.25), 0 0 20px ${glowColor}, 0 0 36px ${glowColor}`
-      : `0 3px 12px rgba(0,0,0,0.3), 0 0 28px ${glowColor}, 0 0 48px ${glowColor}`;
-  const dragShadow =
-    bubbleSize < 60
-      ? `0 2px 8px rgba(0,0,0,0.25), 0 0 24px ${glowColorStrong}, 0 0 44px ${glowColor}, 0 0 60px ${glowColor}80`
-      : `0 3px 12px rgba(0,0,0,0.3), 0 0 36px ${glowColorStrong}, 0 0 56px ${glowColor}, 0 0 76px ${glowColor}80`;
+  const { baseShadow, dragShadow } = getGroupBubbleShadows(group.color, bubbleSize);
 
   useLayoutEffect(() => {
     mvX.set(position.x);
@@ -79,8 +64,7 @@ export function FeatureGroupBubble({
         onPositionChange(mvX.get(), mvY.get());
         const y = info.point.y - rect.top;
         let percentage = 1 - y / rect.height;
-        percentage = Math.max(0, Math.min(1, percentage));
-        onDrag(percentage * 100);
+        onDrag(Math.max(0, Math.min(1, percentage)) * 100);
       }}
       onDragEnd={() => {
         if (!containerRef.current) return;
@@ -101,16 +85,12 @@ export function FeatureGroupBubble({
       whileTap={{ scale: 0.95 }}
       whileDrag={{ scale: 1.02, boxShadow: dragShadow }}
     >
-      <Icon className={`${iconSizeClass} mb-0.5`} />
-      <span className={`${namesClass} font-semibold leading-tight text-center px-1`}>
-        {Array.from(new Set(groupFeatures.map((f) => f.toyName)))
-          .slice(0, 2)
-          .join(', ')}
-        {groupFeatures.length > 2 ? '…' : ''}
-      </span>
-      <span className={`${countClass} leading-none mt-0.5`}>
-        {t('sliders', { count: group.featureIds.length })}
-      </span>
+      <FeatureGroupBubbleLabels
+        group={group}
+        groupFeatures={groupFeatures}
+        bubbleSize={bubbleSize}
+        slidersLabel={t('sliders', { count: group.featureIds.length })}
+      />
     </motion.div>
   );
 }
